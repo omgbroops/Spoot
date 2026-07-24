@@ -177,6 +177,7 @@ test("SpotifyAuth rejects mismatched state before token exchange and still clean
       error instanceof SpotifyAuthError && error.code === "invalid_state",
   );
   assert.equal(fetchCount, 0);
+  assert.equal(session.values.size, 0, "temporary PKCE data is cleared");
   assert.equal(historyCalls.at(-1).at(-1), "/");
 });
 
