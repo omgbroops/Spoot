@@ -7,8 +7,9 @@ import {
   SpotifyAuth,
   SpotifyAuthError,
   shouldReloadOAuthPageAfterBfcacheRestore,
-} from "./auth/spotify-auth.js?v=20260723-oauth5";
-import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-oauth5";
+} from "./auth/spotify-auth.js?v=20260723-oauth6";
+import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-oauth6";
+import { DEFAULT_TOKEN_STORAGE_KEY } from "./auth/token-store.js";
 import { SpotifyApiClient, SpotifyApiError } from "./spotify/api-client.js";
 import { SpotifyPlaybackSdk } from "./spotify/playback-sdk.js";
 import { PlaybackController } from "./spotify/playback-controller.js";
@@ -55,6 +56,8 @@ import {
 import { setupToast, showToast } from "./ui/toast.js";
 
 const UI_PREFERENCES_KEY = "spool.ui.preferences";
+const OAUTH_POPUP_NAME = "spool-spotify-auth";
+const OAUTH_COMPLETE_MESSAGE = "spool:oauth-complete";
 const MOCK_SCENARIOS = new Set([
   "default",
   "paused",
@@ -85,6 +88,19 @@ window.addEventListener("pageshow", (event) => {
     })
   ) {
     location.reload();
+  }
+});
+window.addEventListener("message", (event) => {
+  if (
+    event.origin === location.origin &&
+    event.data?.type === OAUTH_COMPLETE_MESSAGE
+  ) {
+    completeOAuthOnOriginalTab();
+  }
+});
+window.addEventListener("storage", (event) => {
+  if (event.key === DEFAULT_TOKEN_STORAGE_KEY && event.newValue) {
+    completeOAuthOnOriginalTab();
   }
 });
 
@@ -139,6 +155,7 @@ async function initialize() {
     try {
       await auth.handleCallback();
       showToast("Spotify connected.");
+      if (notifyOAuthOpener()) return;
     } catch (error) {
       console.warn(
         "Spotify authorization callback failed.",
@@ -367,15 +384,50 @@ async function login() {
     showSetupHelp();
     return;
   }
-  renderConnection("authorizing");
+  const popup = window.open(
+    "about:blank",
+    OAUTH_POPUP_NAME,
+    "popup=yes,width=560,height=760,resizable=yes,scrollbars=yes",
+  );
+  if (!popup) {
+    renderConnection("error", {
+      message: "Allow popups for 127.0.0.1, then try logging in again.",
+    });
+    return;
+  }
+
+  renderConnection("authorizing", {
+    message: "Finish signing in through the Spotify popup.",
+  });
   try {
     await auth.beginAuthorization({
-      // Replacing the Spool history entry keeps Chromium from restoring the
-      // frozen pre-login page instead of booting the OAuth callback URL.
-      navigate: (url) => location.replace(url),
+      // Keep the original 127.0.0.1 tab open. Privacy browsers may erase all
+      // first-party storage when the last tab for a site navigates away.
+      navigate: (url) => popup.location.replace(url),
     });
+    popup.focus();
   } catch (error) {
+    popup.close();
     renderConnection("error", { message: humanizeError(error) });
+  }
+}
+
+function completeOAuthOnOriginalTab() {
+  if (!auth?.hasSession() || controller) return;
+  createLiveController();
+  renderConnection("logged-in");
+  renderSettings();
+  showToast("Spotify connected.");
+}
+
+function notifyOAuthOpener() {
+  try {
+    if (!window.opener || window.opener.closed) return false;
+    window.opener.postMessage({ type: OAUTH_COMPLETE_MESSAGE }, location.origin);
+    window.close();
+    return true;
+  } catch {
+    return false;
   }
 }
 

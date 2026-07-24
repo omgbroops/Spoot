@@ -41,7 +41,8 @@ test("OAuth callback recovery uses persistent short-lived transaction storage", 
   const app = readFileSync(join(root, "src/js/app.js"), "utf8");
   assert.match(app, /transactionStorage:\s*createOAuthTransactionStorage/u);
   assert.doesNotMatch(app, /transactionStorage:\s*sessionStorage/u);
-  assert.match(app, /navigate:\s*\(url\)\s*=>\s*location\.replace\(url\)/u);
+  assert.match(app, /window\.open\(/u);
+  assert.match(app, /navigate:\s*\(url\)\s*=>\s*popup\.location\.replace\(url\)/u);
   assert.match(app, /window\.addEventListener\("pageshow"/u);
 });
 

@@ -35,12 +35,16 @@ transaction and is the only authority allowed to exchange, refresh, return, or
 clear Spotify tokens.
 
 The OAuth verifier/state transaction is short-lived and state is compared
-before a callback code is accepted. Callback authorization parameters are
-removed with `history.replaceState`. Access-token refresh begins shortly before
-expiry and concurrent callers share one in-flight refresh promise. A rejected
-`invalid_grant` clears the unusable grant and returns the UI to authorization.
-Both the API client and `Spotify.Player.getOAuthToken` request credentials from
-this same provider; neither caches a competing token.
+before a callback code is accepted. Authorization runs in a popup while the
+original loopback-origin tab remains open; this prevents privacy browsers from
+clearing the temporary PKCE verifier when the user leaves for Spotify. Token
+storage events or a same-origin completion message update the original tab.
+Callback authorization parameters are removed with `history.replaceState`.
+Access-token refresh begins shortly before expiry and concurrent callers share
+one in-flight refresh promise. A rejected `invalid_grant` clears the unusable
+grant and returns the UI to authorization. Both the API client and
+`Spotify.Player.getOAuthToken` request credentials from this same provider;
+neither caches a competing token.
 
 ## Spotify boundary
 

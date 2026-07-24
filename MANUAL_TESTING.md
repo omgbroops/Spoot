@@ -94,10 +94,13 @@ you on a blank player.
 
 ### 6. Log in
 
-Choose **Log in**, authenticate with an allowlisted Premium account, and
-approve the requested scopes. After Spotify redirects back:
+Choose **Log in**, allow the popup for `127.0.0.1`, authenticate with an
+allowlisted Premium account, and approve the requested scopes. Keep the
+original Spool tab open while the popup is on Spotify. After Spotify redirects
+the popup back:
 
-- the page should return to the exact loopback URL;
+- the popup should close and the original Spool tab should remain at the exact
+  loopback URL;
 - `code`, `state`, and other OAuth callback parameters should disappear from
   the address bar;
 - the UI should report **Spotify connected** and present **Connect player**;
