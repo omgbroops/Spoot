@@ -168,6 +168,26 @@ test("playback-state hydration is deduplicated while an un-signaled request is i
   assert.deepEqual(await second, { is_playing: true });
 });
 
+test("fresh playback-state reads bypass an older deduplicated request", async () => {
+  const releases = [];
+  let fetchCount = 0;
+  const client = new SpotifyApiClient({
+    tokenProvider: async () => "access",
+    fetchImpl: async () => {
+      fetchCount += 1;
+      await new Promise((resolve) => releases.push(resolve));
+      return jsonResponse({ request: fetchCount });
+    },
+  });
+
+  const older = client.getPlaybackState();
+  const fresh = client.getPlaybackState({ dedupe: false });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(fetchCount, 2);
+  releases.splice(0).forEach((release) => release());
+  await Promise.all([older, fresh]);
+});
+
 test("focused playback and queue methods use documented methods, bodies, and query parameters", async () => {
   const requests = [];
   const client = new SpotifyApiClient({
@@ -198,4 +218,34 @@ test("focused playback and queue methods use documented methods, bodies, and que
     requests[4].url.searchParams.get("uri"),
     "spotify:episode:episode-1",
   );
+});
+
+test("library and device methods use current Spotify endpoints and pagination parameters", async () => {
+  const requests = [];
+  const client = new SpotifyApiClient({
+    tokenProvider: async () => "access",
+    fetchImpl: async (url, options) => {
+      requests.push({ url: new URL(url), options });
+      return jsonResponse({ items: [], devices: [] });
+    },
+  });
+
+  await client.getCurrentUserProfile();
+  await client.getCurrentUserPlaylists({ limit: 50, offset: 100 });
+  await client.getPlaylistItems("AbC123", { limit: 25, offset: 50 });
+  await client.getSavedTracks({ limit: 10, offset: 20, market: "US" });
+  await client.getAvailableDevices();
+  await client.setPlaybackVolume(34.6, { deviceId: "spool-device" });
+
+  assert.equal(requests[0].url.pathname, "/v1/me");
+  assert.equal(requests[1].url.pathname, "/v1/me/playlists");
+  assert.equal(requests[1].url.searchParams.get("limit"), "50");
+  assert.equal(requests[1].url.searchParams.get("offset"), "100");
+  assert.equal(requests[2].url.pathname, "/v1/playlists/AbC123/items");
+  assert.equal(requests[2].url.searchParams.get("additional_types"), "track,episode");
+  assert.equal(requests[3].url.pathname, "/v1/me/tracks");
+  assert.equal(requests[3].url.searchParams.get("market"), "US");
+  assert.equal(requests[4].url.pathname, "/v1/me/player/devices");
+  assert.equal(requests[5].options.method, "PUT");
+  assert.equal(requests[5].url.searchParams.get("volume_percent"), "35");
 });

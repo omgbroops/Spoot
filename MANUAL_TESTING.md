@@ -27,6 +27,12 @@ These constraints were checked against Spotify's documentation on July 23,
   `streaming`, `user-read-private`, and `user-read-email`. Spool never reads or
   stores the account email; that scope is requested only because the SDK lists
   it as a browser-player prerequisite.
+- Library browsing additionally requires `user-library-read`,
+  `playlist-read-private`, and `playlist-read-collaborative`. Current
+  Development Mode only exposes the items of playlists the user owns or
+  collaborates on; followed Spotify/editorial/generated playlists can be
+  returned as metadata without readable items. Spotify does not return playlist
+  folders through the Web API.
 - Access tokens normally last one hour. Refresh tokens issued to Developer
   Dashboard apps last six months from the original user authorization, and
   refreshing an access token does not extend that six-month lifetime. An
@@ -107,23 +113,26 @@ the popup back:
   loopback URL;
 - the original tab should never receive `code`, `state`, or other OAuth
   callback parameters in its address bar;
-- the UI should report **Spotify connected** and present **Connect player**;
+- the SDK should begin registering the Spool device automatically without
+  transferring playback away from another device;
 - no access or refresh token should be printed in the console or URL.
 
 If you deny access, Spool should show a readable denial and allow a fresh login.
 
-### 7. Connect the Web Playback SDK
+### 7. Verify automatic Web Playback SDK registration
 
-Choose **Connect player** in the connection banner and wait for Spool to report
-a ready player/device. In another Spotify client, open the device picker and
-confirm that **Spool** appears. Initialization, account, authentication, and
-playback failures should be shown as actionable errors rather than leaving the
-page blank.
+Wait for Spool to report a ready player/device; no separate Connect Player click
+is required. In another Spotify client, open the device picker and confirm that
+**Spool** appears. Registration must not steal playback from the current device.
+Initialization, account, authentication, and playback failures should be shown
+as actionable errors rather than leaving the page blank.
 
 ### 8. Transfer playback into Spool
 
-Choose **Use Spool**. The status should move through transfer and then active
-states without repeatedly transferring in a loop. If playback arrives paused or
+If another client is active, confirm the banner says **Listening on _device_**
+(or the neutral fallback) and choose **Listen here**. The status should move
+through transfer and then disappear while Spool is active, without repeatedly
+transferring in a loop. If playback arrives paused or
 the browser reports an autoplay failure, click or press play once in Spool; that
 user gesture unlocks protected browser audio. Spotify explicitly recommends
 activating the SDK element from a user interaction in its
@@ -170,16 +179,39 @@ authoritative state refresh.
 Press repeat three times and verify the order `off` -> `context` -> `track` ->
 `off`. The title/label and visual state should match Spotify after each command.
 
-### 15. Test queue rendering
+### 15. Test queue and Library behavior
 
 Open **Up Next** (or press Q). Confirm it renders a **Now Playing** row and the
 upcoming Spotify items with artwork, title, artist/show names, and sensible
-track/episode handling. Skip a track and verify the queue refreshes. An empty
-Spotify queue should show an honest empty state. **Clear**, remove, and drag to
-reorder must remain inactive; Spool must not simulate queue edits Spotify has
-not confirmed.
+track/episode handling. Click an ordinary upcoming song and confirm Spool takes
+over playback and starts that song. This starts a new playback context; it is
+not a claim that Spotify jumped to that exact queue occurrence. Episode, local,
+null, restricted, and unplayable rows must remain grey and inert. Skip a track
+and verify the queue refreshes. An empty Spotify queue should show an honest
+empty state. **Clear**, remove, and drag to reorder must remain inactive.
 
-### 16. Test immersive mode
+Open **Library**. Confirm Liked Songs and every playlist returned by Spotify are
+listed. Owned/collaborative playlists should drill into paginated items and
+ordinary song clicks should play through Spool. A followed Spotify/editorial or
+generated playlist should remain visible but grey as **Metadata only**. A
+playlist-item `403` must downgrade to that state instead of looking empty. The
+Library note must explain that Spotify does not expose playlist folders or DJ;
+Spool must not invent either.
+
+### 16. Test devices, volume, system media, and immersive mode
+
+Open Settings and expand the custom Listening Device control. Confirm the
+active device is selected, unavailable/restricted devices cannot be chosen, and
+selecting another available device transfers playback there. After transfer,
+the top banner should offer **Listen here** again. Select Spool and confirm it
+hides.
+
+Open Sound and change **Spool volume**; audible browser volume and the numeric
+value should agree. Up/Down should change it by five percent while Shift+Up/Down
+must leave the inactive speed control alone. On iOS, Spotify may leave browser
+volume under hardware control. Toggle **Show song in media player** and verify
+OS/browser metadata appears and clears. Toggle **Headphone click → skip** and
+verify next/previous media keys become active only while Spool owns playback.
 
 Open immersive mode with its button or F. Confirm its artwork, title, artists,
 progress, play/pause, previous/next, seek, shuffle, and repeat remain synchronized
@@ -191,8 +223,8 @@ and with Escape.
 
 Reload [http://127.0.0.1:5173/](http://127.0.0.1:5173/). The authenticated
 session should restore as **Spotify connected** without another authorization
-prompt while the stored grant remains valid. Choose **Connect player** again;
-the SDK should recreate one Spool device and state/queue should hydrate. Leaving
+prompt while the stored grant remains valid. The SDK should recreate one Spool
+device automatically and state/queue/device data should hydrate. Leaving
 the app open across an access-token expiry should refresh once rather than
 racing duplicate refreshes. Do not copy token values out of browser storage to
 perform this check. At the six-month refresh-token boundary, a clean request to
@@ -207,11 +239,11 @@ or paste any prior token value. Reload and verify Spool stays logged out.
 
 ### 19. Verify inactive legacy controls cannot alter playback
 
-While a track is playing, open Sound and interact with any controls the browser
-allows; try Library, Import/Dropbox, lyrics editing, statistics, playlist
-editing, Clear Queue, and queue-item editing. Each surface must remain disabled
-or explain that it is not connected. Spotify playback, volume, speed, effects,
-queue, and position must not change. There must be no second local
+While a track is playing, try the inactive Sound controls (speed, reverb,
+crossfade, gapless, and EQ), Import/Dropbox, lyrics editing, statistics,
+playlist editing, Clear Queue, and queue-item editing. Each inactive surface
+must remain disabled or explain that it is not connected. Playback speed,
+effects, queue order, and position must not change. There must be no second local
 `HTMLAudioElement`, Web Audio graph, or legacy `musicplayer` database competing
 with the Spotify SDK.
 

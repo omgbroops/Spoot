@@ -46,6 +46,15 @@ class FakeSdk extends Emitter {
     this.calls.push(["seek", position]);
   }
 
+  async getVolume() {
+    this.calls.push("get-volume");
+    return 0.7;
+  }
+
+  async setVolume(volume) {
+    this.calls.push(["set-volume", volume]);
+  }
+
   disconnect() {
     this.calls.push("disconnect");
     this.ready = false;
@@ -59,12 +68,15 @@ class FakeSdk extends Emitter {
 
 function createApi() {
   const calls = [];
+  const stateOptions = [];
   let shuffle = false;
   let repeat = "off";
   return {
     calls,
-    async getPlaybackState() {
+    stateOptions,
+    async getPlaybackState(options = {}) {
       calls.push("get-state");
+      stateOptions.push(options);
       return {
         device: {
           id: "spool-device",
@@ -84,6 +96,15 @@ function createApi() {
     async transferPlayback(deviceId, options) {
       calls.push(["transfer", deviceId, options]);
     },
+    async getAvailableDevices() {
+      calls.push("get-devices");
+      return {
+        devices: [
+          { id: "spool-device", name: "Spool", type: "Computer", is_active: true, is_restricted: false },
+          { id: "phone-device", name: "Phone", type: "Smartphone", is_active: false, is_restricted: false },
+        ],
+      };
+    },
     async setShuffle(value, options) {
       shuffle = value;
       calls.push(["shuffle", value, options]);
@@ -92,7 +113,7 @@ function createApi() {
       repeat = value;
       calls.push(["repeat", value, options]);
     },
-    async startPlayback() {},
+    async startPlayback(options) { calls.push(["start", options]); },
     async pausePlayback() {},
     async skipPrevious() {},
     async skipNext() {},
@@ -238,5 +259,105 @@ test("null SDK state falls back to one dedupable API reconciliation", async () =
   assert.equal(
     api.calls.filter((call) => call === "get-state").length,
     before + 1,
+  );
+});
+
+test("controller lists devices, transfers externally, plays a queue song in Spool, and controls SDK volume", async () => {
+  const sdk = new FakeSdk();
+  const api = createApi();
+  const controller = new PlaybackController({
+    apiClient: api,
+    sdk,
+    queueService: createQueueService(),
+    setIntervalImpl: () => 1,
+    clearIntervalImpl: () => {},
+  });
+  sdk.becomeReady();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const devices = await controller.refreshDevices();
+  assert.equal(devices[1].name, "Phone");
+  await controller.transferToDevice("phone-device");
+  assert.ok(api.calls.some((call) => Array.isArray(call) && call[0] === "transfer" && call[1] === "phone-device"));
+
+  controller.playbackState = { ...controller.playbackState, activeDevice: false };
+  const transfersBeforePlay = api.calls.filter((call) => Array.isArray(call) && call[0] === "transfer").length;
+  await controller.playNow("spotify:track:track-2");
+  assert.ok(api.calls.some((call) => Array.isArray(call) && call[0] === "start" && call[1].uris[0] === "spotify:track:track-2"));
+  assert.equal(
+    api.calls.filter((call) => Array.isArray(call) && call[0] === "transfer").length,
+    transfersBeforePlay,
+  );
+  assert.equal(api.stateOptions.at(-1).dedupe, false);
+  assert.equal(await controller.refreshVolume(), 0.7);
+  assert.equal(await controller.setVolume(0.35), 0.35);
+  assert.ok(sdk.calls.some((call) => Array.isArray(call) && call[0] === "set-volume" && call[1] === 0.35));
+});
+
+test("disconnect during connect cannot restart the progress loop", async () => {
+  let releaseConnect;
+  const sdk = new FakeSdk();
+  sdk.connect = async () => new Promise((resolve) => {
+    releaseConnect = () => resolve(true);
+  });
+  let intervalCalls = 0;
+  const controller = new PlaybackController({
+    apiClient: createApi(),
+    sdk,
+    queueService: createQueueService(),
+    setIntervalImpl: () => {
+      intervalCalls += 1;
+      return 1;
+    },
+    clearIntervalImpl: () => {},
+  });
+
+  const connection = controller.connect();
+  await new Promise((resolve) => setImmediate(resolve));
+  await controller.disconnect();
+  releaseConnect();
+
+  assert.equal(await connection, false);
+  assert.equal(intervalCalls, 0);
+  assert.equal(controller.connectionState, "logged-in");
+});
+
+test("rapid direct-play requests are serialized with the last click winning", async () => {
+  const sdk = new FakeSdk();
+  const api = createApi();
+  let releaseFirst;
+  let firstStarted;
+  const firstStartedPromise = new Promise((resolve) => {
+    firstStarted = resolve;
+  });
+  api.startPlayback = async (options) => {
+    api.calls.push(["start", options]);
+    if (options.uris[0] === "spotify:track:first") {
+      firstStarted();
+      await new Promise((resolve) => {
+        releaseFirst = resolve;
+      });
+    }
+  };
+  const controller = new PlaybackController({
+    apiClient: api,
+    sdk,
+    queueService: createQueueService(),
+    setIntervalImpl: () => 1,
+    clearIntervalImpl: () => {},
+  });
+  sdk.becomeReady();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const first = controller.playNow("spotify:track:first");
+  await firstStartedPromise;
+  const second = controller.playNow("spotify:track:second");
+  releaseFirst();
+
+  assert.equal(await first, false);
+  assert.equal(await second, true);
+  assert.deepEqual(
+    api.calls.filter((call) => Array.isArray(call) && call[0] === "start").map((call) => call[1].uris[0]),
+    ["spotify:track:first", "spotify:track:second"],
   );
 });

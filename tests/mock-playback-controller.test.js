@@ -27,6 +27,12 @@ test("mock controller drives the real controller-shaped playback flow", async ()
   await controller.setShuffle(true);
   assert.equal(controller.playbackState.shuffleEnabled, true);
   assert.equal(await controller.cycleRepeat(), "context");
+  assert.equal((await controller.refreshDevices()).length, 2);
+  await controller.transferToDevice("mock-living-room");
+  assert.equal(controller.playbackState.activeDevice, false);
+  await controller.playNow("spotify:track:mock-silver-thread");
+  assert.equal(controller.playbackState.activeDevice, true);
+  assert.equal(await controller.setVolume(0.4), 0.4);
 
   assert.ok(states.length >= 6);
   assert.ok(queues.length >= 2);

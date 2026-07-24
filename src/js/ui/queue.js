@@ -1,5 +1,6 @@
 import { getElements } from './elements.js';
 import { DEFAULT_COVER, artistText, artworkUrl } from './now-playing.js';
+import { directPlaybackBlockReason } from '../spotify/playability.js';
 
 const EMPTY_MESSAGES = {
   loading: 'Loading your Spotify queue…',
@@ -8,6 +9,25 @@ const EMPTY_MESSAGES = {
   disconnected: 'Connect Spotify to see your queue.',
   error: 'The Spotify queue could not be loaded.',
 };
+
+let queueCleanup;
+
+export function setupQueue({ onPlay } = {}) {
+  queueCleanup?.();
+  const { queueList } = getElements();
+  if (!queueList) return () => {};
+  const handleClick = (event) => {
+    const row = event.target.closest('[data-play-uri]');
+    if (!row || row.disabled) return;
+    onPlay?.(row.dataset.playUri);
+  };
+  queueList.addEventListener('click', handleClick);
+  queueCleanup = () => {
+    queueList.removeEventListener('click', handleClick);
+    queueCleanup = undefined;
+  };
+  return queueCleanup;
+}
 
 export function renderQueue(queueState = {}) {
   const { queueList, queueClear } = getElements();
@@ -63,7 +83,8 @@ export function setQueueVisible(visible) {
 }
 
 export function createQueueRow(item, options = {}) {
-  const row = document.createElement('div');
+  const unavailableReason = options.playing ? null : directPlaybackBlockReason(item);
+  const row = document.createElement(options.playing ? 'div' : 'button');
   const type = item.contentType || item.type || 'track';
   const title = item.title || item.name || (type === 'episode' ? 'Untitled episode' : 'Untitled track');
   const subtitle = artistText(item) || item.albumName || item.album?.name || (type === 'episode' ? 'Podcast episode' : 'Unknown artist');
@@ -73,6 +94,14 @@ export function createQueueRow(item, options = {}) {
   const subtitleElement = document.createElement('div');
 
   row.className = `row${options.playing ? ' playing' : ''}`;
+  if (!options.playing) {
+    row.type = 'button';
+    row.classList.add('queue-track');
+    row.disabled = Boolean(unavailableReason);
+    row.title = unavailableReason || `Play ${title} now`;
+    row.setAttribute('aria-label', unavailableReason || `Play ${title} now`);
+    if (!unavailableReason) row.dataset.playUri = item.uri;
+  }
   row.dataset.itemType = type;
   if (item.uri) row.dataset.uri = item.uri;
   row.draggable = false;
@@ -91,7 +120,7 @@ export function createQueueRow(item, options = {}) {
   info.append(titleElement, subtitleElement);
   row.append(image, info);
 
-  if (options.removable) row.append(inactiveRemoveButton());
+  if (!options.playing && !unavailableReason) row.append(playNowIcon());
   if (options.playing) row.append(equalizerBars());
   return row;
 }
@@ -103,19 +132,12 @@ function sectionLabel(text) {
   return label;
 }
 
-function inactiveRemoveButton() {
-  const buttons = document.createElement('div');
-  const button = document.createElement('button');
-  buttons.className = 'row-btns';
-  button.className = 'mini-btn inactive-control';
-  button.type = 'button';
-  button.dataset.inactiveFeature = 'Removing Spotify queue items';
-  button.setAttribute('aria-disabled', 'true');
-  button.setAttribute('aria-label', 'Removing Spotify queue items is not connected in this pass');
-  button.title = 'Removing Spotify queue items is not connected in this pass';
-  button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg>';
-  buttons.append(button);
-  return buttons;
+function playNowIcon() {
+  const icon = document.createElement('span');
+  icon.className = 'row-play-now';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>';
+  return icon;
 }
 
 function equalizerBars() {

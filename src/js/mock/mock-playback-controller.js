@@ -19,6 +19,8 @@ export class MockPlaybackController extends Emitter {
     this.deviceId = null;
     this.playbackState = null;
     this.queue = { nowPlaying: null, upcoming: [], items: [], isEmpty: true };
+    this.devices = [];
+    this.volume = 0.82;
   }
 
   async connect() {
@@ -27,8 +29,14 @@ export class MockPlaybackController extends Emitter {
     this.#setConnection("connecting-player");
     await Promise.resolve();
     this.deviceId = "spool-mock-device";
+    this.devices = [
+      { id: this.deviceId, name: "Spool (Mock)", type: "Computer", isActive: false, isRestricted: false, supportsVolume: true, volumePercent: 82 },
+      { id: "mock-living-room", name: "Living room", type: "Speaker", isActive: false, isRestricted: false, supportsVolume: true, volumePercent: 56 },
+    ];
     this.#setConnection("player-ready");
     this.#applyScenarioState();
+    this.emit("devices", this.devices);
+    this.emit("volume", this.volume);
     this.#startProgress();
     return true;
   }
@@ -39,8 +47,10 @@ export class MockPlaybackController extends Emitter {
     this.deviceId = null;
     this.playbackState = null;
     this.queue = { nowPlaying: null, upcoming: [], items: [], isEmpty: true };
+    this.devices = [];
     this.emit("state", this.playbackState);
     this.emit("queue", this.queue);
+    this.emit("devices", this.devices);
     this.#setConnection("logged-out");
   }
 
@@ -51,9 +61,38 @@ export class MockPlaybackController extends Emitter {
     this.playbackState = {
       ...(this.playbackState ?? createMockPlaybackState()),
       activeDevice: true,
+      device: { ...(this.playbackState?.device ?? {}), id: this.deviceId, name: "Spool (Mock)", isActive: true },
       authoritativeAt: Date.now(),
     };
+    this.devices = this.devices.map((device) => ({ ...device, isActive: device.id === this.deviceId }));
     this.emit("state", this.playbackState);
+    this.emit("devices", this.devices);
+    return true;
+  }
+
+  async transferToDevice(deviceId) {
+    if (deviceId === this.deviceId) return this.transferHere();
+    const device = this.devices.find((candidate) => candidate.id === deviceId);
+    if (!device || device.isRestricted) throw new Error("Mock device is unavailable.");
+    this.devices = this.devices.map((candidate) => ({ ...candidate, isActive: candidate.id === deviceId }));
+    this.playbackState = {
+      ...this.playbackState,
+      activeDevice: false,
+      device: { ...device, isActive: true },
+      authoritativeAt: Date.now(),
+    };
+    this.emit("devices", this.devices);
+    this.emit("state", this.playbackState);
+    this.#setConnection("player-ready");
+    return true;
+  }
+
+  async playNow(uri) {
+    const index = MOCK_TRACKS.findIndex((track) => track.uri === uri && track.type === "track");
+    if (index < 0) throw new Error("Only mock songs can be played directly.");
+    this.#trackIndex = index;
+    await this.transferHere();
+    this.#changeTrack();
     return true;
   }
 
@@ -130,6 +169,26 @@ export class MockPlaybackController extends Emitter {
     this.#throwScenario("rate-limit", "Mock Spotify queue rate limit.");
     this.emit("queue", this.queue);
     return this.queue;
+  }
+
+  async refreshDevices() {
+    this.emit("devices", this.devices);
+    return this.devices;
+  }
+
+  async refreshVolume() {
+    this.emit("volume", this.volume);
+    return this.volume;
+  }
+
+  async setVolume(volume) {
+    const normalized = Number(volume);
+    if (!Number.isFinite(normalized) || normalized < 0 || normalized > 1) {
+      throw new RangeError("Mock volume must be between 0 and 1.");
+    }
+    this.volume = normalized;
+    this.emit("volume", normalized);
+    return normalized;
   }
 
   async addToQueue(uri) {

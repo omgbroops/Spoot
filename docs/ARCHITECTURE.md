@@ -18,7 +18,7 @@ separate demo page or bypass the production UI.
 configuration, chooses live or explicit mock mode, creates one controller, and
 wires it to the UI.
 
-`src/js/config.js` owns the six requested Spotify scopes and validates the
+`src/js/config.js` owns the nine requested Spotify scopes and validates the
 development origin. Live mode dynamically imports `config.local.js`, falling
 back to `config.example.js` only to show an unconfigured state. Mock mode is
 selected only when the URL contains `mock=1`; the optional `scenario` parameter
@@ -62,12 +62,22 @@ The live controller composes two Spotify adapters:
   parsing, one forced-refresh retry after `401`, bounded `429` handling using
   `Retry-After`, readable `403`/restriction errors, and `AbortSignal` where the
   caller can cancel work. Playback-state requests are deduplicated rather than
-  polled aggressively.
+  polled aggressively. It also owns device discovery/transfer and the current
+  profile, saved-track, playlist, and `/playlists/{id}/items` requests.
 - `spotify/playback-sdk.js` loads the official SDK script once and creates one
   `Spotify.Player`. It translates `ready`, `not_ready`,
   `player_state_changed`, initialization, authentication, account, playback,
   and autoplay events into application events. It owns local SDK commands such
-  as toggle, previous, next, and seek.
+  as toggle, previous, next, seek, and browser-device volume. A bounded
+  reconnect reuses the same player object after `not_ready` instead of creating
+  duplicate Connect devices.
+
+`spotify/library-service.js` owns Spotify-specific library pagination and
+capability classification. It synthesizes Liked Songs from `/me/tracks`,
+flattens `/me/playlists`, and permits drilldown only for owned or collaborative
+playlists. A playlist-item `403` becomes a stable metadata-only state. Null,
+local, restricted, unplayable, and non-track rows remain visible but cannot
+dispatch browser playback.
 
 The controller chooses exactly one path for each command. SDK methods are used
 for commands best targeted at the browser player; device-level operations such
@@ -80,9 +90,11 @@ The UI talks only to the application-level controller contract:
 
 ```text
 connect()             disconnect()          transferHere()
+transferToDevice(id)  playNow(trackUri)      refreshDevices()
 togglePlay()          previous()            next()
 seek(positionMs)      setShuffle(enabled)   cycleRepeat()
 refreshState()        refreshQueue()        addToQueue(uri)
+refreshVolume()       setVolume(0..1)
 ```
 
 The controller reconciles SDK `player_state_changed` events (the primary signal
@@ -96,7 +108,10 @@ Visible progress is interpolated locally from the last authoritative position
 and timestamp. It stops while paused, clamps to duration, and resynchronizes on
 every Spotify state event; animation never becomes a reason to poll Spotify.
 Queue payloads are separately normalized into current and upcoming items with
-track/episode-safe metadata.
+track/episode-safe metadata. Clicking an ordinary queue track starts a new
+one-track playback context in Spool; Spotify has no public API for jumping to a
+specific occurrence inside the existing queue, so episodes, local files, and
+restricted rows remain inert.
 
 ## UI boundary
 
@@ -106,10 +121,17 @@ immersive controls share the same normalized state, so neither becomes a second
 source of truth. Widget dragging handles pointer ownership, front ordering,
 screen-edge clamping, responsive defaults, and persisted positions.
 
+The top status is hidden while Spool is active. When another Spotify Connect
+device is active it displays the returned device name (or a neutral fallback)
+and offers **Listen here**. Settings renders the current device list as a custom
+glass listbox; restricted or identifier-less devices remain disabled.
+
 Inactive legacy surfaces are identified in markup and resolve to a disabled
-state or an explanatory toast. They never dispatch playback commands. The Sound
-modal remains visual-only; its volume, speed, EQ, reverb, crossfade, and gapless
-controls cannot reach the SDK or an audio element.
+state or an explanatory toast. They never dispatch playback commands. Browser
+volume is the only live Sound control; speed, EQ, reverb, crossfade, and gapless
+remain isolated. Spool owns an optional Media Session adapter so the existing
+system-media and headphone-skip settings can change without competing with the
+SDK's disabled built-in Media Session integration.
 
 ## Storage ownership
 
@@ -120,10 +142,11 @@ Spool uses small, explicit browser-storage namespaces:
 | `spool.auth.tokens` | `localStorage` | token store | access/refresh tokens, access and refresh expiry timestamps, authorization time, token type, granted scopes |
 | `spool.auth.pkce` | mirrored `sessionStorage` + `localStorage` | Spotify auth | capped, short-lived verifier/state transactions keyed by OAuth state; the opener-owned auth instance handles popup callbacks, the persistent copy supports direct/fresh-tab fallback, and the matching entry is consumed from both stores |
 | `spool.ui.widget-positions` | `localStorage` | `ui/widgets.js` | saved `{x, y}` positions for the Now Playing, queue, and lyrics widgets |
-| `spool.ui.preferences` | `localStorage` | `app.js` | queue, dock, and lyrics-widget visibility |
+| `spool.ui.preferences` | `localStorage` | `app.js` | queue, dock, lyrics-widget visibility, Media Session visibility, and media-key skip preference |
 
-Spotify playback state, queue data, artwork URLs, and audio are not persisted as
-a local media library. The application never opens or reuses the original
+Spotify playback state, device lists, Library pages, queue data, temporary
+artwork URLs, and audio are not persisted as a local media library. The
+application never opens or reuses the original
 `musicplayer` IndexedDB database.
 
 Because this is a static browser client, tokens are stored in the user's browser
@@ -137,7 +160,8 @@ and clear credentials on logout or unrecoverable authorization failure.
 using `mock/mock-fixtures.js`. `?mock=1&scenario=<name>` selects `default`,
 `paused`, `empty-queue`, `auth-error`, `sdk-error`, `rate-limit`, or `null`.
 Mock state drives the real renderers, transport handlers, progress path, queue,
-widgets, and immersive view. Mock mode makes UI and orchestration testable; it
+device picker, browser volume, Library renderer, widgets, and immersive view.
+Mock mode makes UI and orchestration testable; it
 does not prove Spotify authorization, SDK provisioning, protected audio, or
 real-account restrictions.
 

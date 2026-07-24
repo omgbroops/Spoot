@@ -7,14 +7,16 @@ import {
   SpotifyAuth,
   SpotifyAuthError,
   shouldReloadOAuthPageAfterBfcacheRestore,
-} from "./auth/spotify-auth.js?v=20260723-oauth11";
-import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-oauth11";
+} from "./auth/spotify-auth.js?v=20260723-library1";
+import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-library1";
 import { DEFAULT_TOKEN_STORAGE_KEY } from "./auth/token-store.js";
 import { SpotifyApiClient, SpotifyApiError } from "./spotify/api-client.js";
 import { SpotifyPlaybackSdk } from "./spotify/playback-sdk.js";
 import { PlaybackController } from "./spotify/playback-controller.js";
 import { SpotifyQueueService } from "./spotify/queue-service.js";
+import { SpotifyLibraryService } from "./spotify/library-service.js";
 import { MockPlaybackController } from "./mock/mock-playback-controller.js";
+import { MockLibraryService } from "./mock/mock-library-service.js";
 import { getElements } from "./ui/elements.js";
 import {
   renderNowPlaying,
@@ -22,7 +24,19 @@ import {
   renderProgress,
   setPlaybackControlsEnabled,
 } from "./ui/now-playing.js";
-import { renderQueue, renderQueueUnavailable } from "./ui/queue.js";
+import { renderQueue, renderQueueUnavailable, setupQueue } from "./ui/queue.js";
+import {
+  renderLibraryDetail,
+  renderLibrarySources,
+  setupLibrary,
+} from "./ui/library.js";
+import { renderDevicePicker, setupDevicePicker } from "./ui/device-picker.js";
+import {
+  renderMediaSession,
+  setMediaSessionPreferences,
+  setupMediaSession,
+  updateMediaSessionPosition,
+} from "./ui/media-session.js";
 import {
   closeImmersive,
   isImmersiveOpen,
@@ -74,13 +88,22 @@ const MOCK_SCENARIOS = new Set([
 let config;
 let auth;
 let controller;
+let libraryService;
 let connectionState = "not-configured";
 let currentPlayback = null;
 let currentQueue = null;
+let currentDevices = [];
+let currentVolume = 1;
+let librarySources = [];
+let selectedLibrarySource = null;
+let selectedLibraryItems = [];
+let selectedLibraryNextOffset = null;
 let controllerUnsubscribers = [];
 let queueVisible = true;
 let dockVisible = true;
 let lyricsVisible = false;
+let mediaSessionEnabled = true;
+let headphoneSkipEnabled = false;
 let oauthPopup;
 let oauthCallbackInFlightState;
 let pendingOAuthCallback;
@@ -127,6 +150,7 @@ await initialize().catch((error) => {
 
 async function initialize() {
   setupUi();
+  removeLegacyOAuthQuery();
   config = await loadConfig();
 
   if (config.mock) {
@@ -185,14 +209,13 @@ async function initialize() {
     auth.logout();
     renderLoggedOut();
     renderConnection("logged-out", {
-      message: "Spotify added a browser-playback permission. Log in once more to approve it.",
+      message: "Spool added library permissions. Log in once more to approve the update.",
     });
     return;
   }
 
   createLiveController();
-  renderConnection("logged-in");
-  renderSettings();
+  await connectPlayer();
 }
 
 function setupUi() {
@@ -216,10 +239,16 @@ function setupUi() {
   queueVisible = preferences.queueVisible !== false;
   dockVisible = preferences.dockVisible !== false;
   lyricsVisible = Boolean(preferences.lyricsVisible);
+  mediaSessionEnabled = preferences.mediaSessionEnabled !== false;
+  headphoneSkipEnabled = Boolean(preferences.headphoneSkipEnabled);
   setQueueVisible(queueVisible);
   setDockVisible(dockVisible);
   setLyricsVisible(lyricsVisible);
   setHiddenMode(false);
+  setMediaSessionPreferences({
+    enabled: mediaSessionEnabled,
+    headphoneSkip: headphoneSkipEnabled,
+  });
 
   renderNowPlaying({ emptyMessage: "Connect Spotify to start" });
   renderImmersive({ emptyMessage: "Connect Spotify to start" });
@@ -227,6 +256,27 @@ function setupUi() {
   setPlaybackControlsEnabled(false, "Connect the Spool player first");
 
   bindPlaybackButtons();
+  setupQueue({ onPlay: playTrackNow });
+  setupDevicePicker({
+    onOpen: refreshDevices,
+    onSelect: transferToDevice,
+  });
+  setupLibrary({
+    onSelectSource: openLibrarySource,
+    onPlay: playTrackNow,
+    onBack: showLibrarySources,
+    onLoadMore: loadMoreLibraryItems,
+    onRefresh: () => refreshLibrary({ force: true }),
+  });
+  setupMediaSession({
+    onPlay: () => currentPlayback?.paused && runMediaCommand(() => controller?.togglePlay()),
+    onPause: () => currentPlayback?.isPlaying && runMediaCommand(() => controller?.togglePlay()),
+    onSeek: (position) => runMediaCommand(() => controller?.seek(position * 1000)),
+    onPrevious: () => runMediaCommand(() => controller?.previous()),
+    onNext: () => runMediaCommand(() => controller?.next()),
+  });
+  bindVolume();
+  bindMediaSettings();
   bindSeekSurface(getElements().seek);
   bindSeekSurface(getElements().immersiveSeek);
   bindDock();
@@ -242,12 +292,18 @@ function setupUi() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") reconcilePlayback();
   });
+  document.addEventListener("spool:modal-open", ({ detail }) => {
+    if (detail?.id === "modal-library") refreshLibrary();
+    if (detail?.id === "modal-settings") refreshDevices();
+    if (detail?.id === "modal-eq") controller?.refreshVolume?.().catch(() => {});
+  });
 }
 
 async function initializeMockMode() {
   const requested = new URL(location.href).searchParams.get("scenario") || "default";
   const scenario = MOCK_SCENARIOS.has(requested) ? requested : "default";
   controller = new MockPlaybackController({ scenario });
+  libraryService = new MockLibraryService();
   bindController(controller);
   renderConnection("logged-in", {
     title: "Spool mock mode",
@@ -265,6 +321,7 @@ async function initializeMockMode() {
     }
 
     renderConnection("active", {
+      hidden: true,
       title: "Spool mock mode",
       message: `Scenario: ${scenario}. No Spotify requests are being made.`,
     });
@@ -285,6 +342,7 @@ function createLiveController() {
     name: config.deviceName,
   });
   const queueService = new SpotifyQueueService({ apiClient });
+  libraryService = new SpotifyLibraryService({ apiClient });
   controller = new PlaybackController({ apiClient, sdk, queueService });
   bindController(controller);
 }
@@ -293,22 +351,38 @@ function bindController(nextController) {
   controllerUnsubscribers.forEach((unsubscribe) => unsubscribe());
   controllerUnsubscribers = [
     nextController.on("connection", (status) => {
-      renderConnection(status.state, status);
+      connectionState = status.state;
+      if (["active", "player-ready"].includes(status.state)) {
+        renderSteadyConnection(status);
+      } else {
+        renderConnection(status.state, status);
+      }
       renderSettings(status);
     }),
     nextController.on("state", (playback) => {
       currentPlayback = playback;
       renderPlayback(playback);
+      renderSteadyConnection();
       renderSettings();
     }),
     nextController.on("progress", (positionMs) => {
       if (!currentPlayback) return;
+      currentPlayback = { ...currentPlayback, positionMs };
       renderProgress(positionMs, currentPlayback.durationMs);
       renderImmersive({ ...currentPlayback, positionMs });
+      updateMediaSessionPosition(positionMs, currentPlayback.durationMs);
     }),
     nextController.on("queue", (queue) => {
       currentQueue = queue;
       renderQueue(queue);
+    }),
+    nextController.on("devices", (devices) => {
+      currentDevices = devices;
+      renderSettings();
+    }),
+    nextController.on("volume", (volume) => {
+      currentVolume = volume;
+      renderVolume();
     }),
     nextController.on("notice", ({ message }) => showToast(message)),
     nextController.on("null-state", ({ message }) => {
@@ -326,7 +400,9 @@ function bindController(nextController) {
         "Spotify operation failed.",
         safeDiagnostic(diagnosticError, operation || type),
       );
-      showToast(message || humanizeError(error));
+      if (operation !== "refresh-devices") {
+        showToast(message || humanizeError(error));
+      }
       if (operation === "refresh-queue") {
         renderQueueUnavailable(message);
       }
@@ -339,6 +415,7 @@ function renderPlayback(playback) {
   renderNowPlaying(normalized);
   renderImmersive(normalized);
   renderPlaybackControls(normalized);
+  renderMediaSession(playback);
 
   const hasItem = Boolean(playback?.item || playback?.currentItem);
   const enabled = Boolean(playback?.activeDevice && hasItem);
@@ -362,14 +439,53 @@ function renderConnection(state, overrides = {}) {
   });
 }
 
+function renderSteadyConnection(status = {}) {
+  if (!(config?.mock || auth?.hasSession())) return;
+  if (currentPlayback?.activeDevice && controller?.deviceId) {
+    renderConnection("active", { hidden: true });
+    return;
+  }
+
+  const externalDevice = currentPlayback?.device?.isActive
+    ? currentPlayback.device
+    : null;
+  if (externalDevice && externalDevice.id !== controller?.deviceId) {
+    const name = externalDevice.name?.trim();
+    renderConnection("external-device", {
+      title: name ? `Listening on ${name}` : "Listening on another device",
+      message: "Spotify is playing somewhere else.",
+      primaryLabel: "Listen here",
+      primaryDisabled: !controller?.deviceId,
+      onPrimary: transferHere,
+    });
+    return;
+  }
+
+  renderConnection(controller?.deviceId ? "player-ready" : "logged-in", {
+    title: controller?.deviceId ? "No active Spotify device" : "Spotify connected",
+    message: controller?.deviceId
+      ? "Choose Listen here to start using Spool."
+      : status.message || "Preparing the Spool browser player…",
+    primaryLabel: controller?.deviceId ? "Listen here" : "Connecting…",
+    primaryDisabled: !controller?.deviceId,
+    onPrimary: transferHere,
+  });
+}
+
 function renderLoggedOut() {
   currentPlayback = null;
   currentQueue = null;
+  currentDevices = [];
+  librarySources = [];
+  selectedLibrarySource = null;
+  selectedLibraryItems = [];
+  selectedLibraryNextOffset = null;
   setHiddenMode(false);
   renderConnection("logged-out");
   renderNowPlaying({ emptyMessage: "Log in to Spotify to start" });
   renderImmersive({ emptyMessage: "Log in to Spotify to start" });
   renderQueue({ status: "disconnected" });
+  renderMediaSession(null);
   setPlaybackControlsEnabled(false, "Log in to Spotify first");
   renderSettings();
 }
@@ -382,19 +498,40 @@ function renderSettings(status = {}) {
     transferring: connectionState === "transferring-playback",
     accountText: config?.mock ? "Mock session" : loggedIn ? "Spotify connected" : "Not connected",
     deviceText: controller?.deviceId
-      ? connectionState === "active" ? "Spool is the active device" : "Spool device ready"
+      ? currentPlayback?.activeDevice
+        ? "Spool is the active device"
+        : currentPlayback?.device?.isActive
+          ? `Listening on ${currentPlayback.device.name || "another device"}`
+          : "Spool device ready"
       : status.message || "Spool device unavailable",
+    transfer: {
+      label: "Listen here",
+      onClick: transferHere,
+      hidden: !loggedIn || !controller?.deviceId || Boolean(currentPlayback?.activeDevice),
+      disabled: connectionState === "transferring-playback",
+    },
     onConnect: login,
     onTransfer: transferHere,
     onDisconnect: logout,
   });
+  renderDevicePicker({
+    devices: currentDevices,
+    activeDeviceId: currentPlayback?.device?.isActive ? currentPlayback.device.id : null,
+    activeDeviceName: currentPlayback?.device?.isActive ? currentPlayback.device.name : null,
+    spoolDeviceId: controller?.deviceId ?? null,
+    loading: connectionState === "loading-sdk" || connectionState === "connecting-player",
+    loggedIn,
+  });
+  renderPreferenceToggle(getElements().mediaToggle, mediaSessionEnabled);
+  renderPreferenceToggle(getElements().headphoneSkipToggle, headphoneSkipEnabled);
+  renderVolume();
 }
 
 async function handlePrimaryAction() {
   if (connectionState === "not-configured") return showSetupHelp();
   if (connectionState === "logged-out" || connectionState === "authorization-expired") return login();
   if (connectionState === "logged-in") return connectPlayer();
-  if (connectionState === "player-ready") return transferHere();
+  if (connectionState === "player-ready" || connectionState === "external-device") return transferHere();
   if (connectionState === "temporarily-unavailable" || connectionState === "error") {
     if (pendingOAuthCallback) return retryPendingOAuthCallback();
     return controller ? connectPlayer() : login();
@@ -471,7 +608,7 @@ async function handleOAuthCallbackMessage(data, source = null) {
     if (!auth.hasGrantedScopes(config.scopes)) {
       auth.logout();
       throw new SpotifyAuthError(
-        "Spotify did not grant every permission required for browser playback.",
+        "Spotify did not grant every permission required by Spool.",
         { code: "insufficient_scope" },
       );
     }
@@ -577,12 +714,10 @@ function renderOAuthCallbackFailure(error) {
 function completeOAuthOnOriginalTab() {
   if (
     !auth?.hasSession() ||
-    !auth.hasGrantedScopes(config?.scopes ?? []) ||
-    controller
+    !auth.hasGrantedScopes(config?.scopes ?? [])
   ) return;
-  createLiveController();
-  renderConnection("logged-in");
-  renderSettings();
+  if (!controller) createLiveController();
+  connectPlayer();
   showToast("Spotify connected.");
 }
 
@@ -602,6 +737,13 @@ async function connectPlayer() {
   if (!controller) return login();
   try {
     await controller.connect();
+    await Promise.allSettled([
+      controller.refreshState?.(),
+      controller.refreshQueue?.(),
+      controller.refreshDevices?.(),
+      controller.refreshVolume?.(),
+    ]);
+    renderSteadyConnection();
   } catch (error) {
     renderConnection(isAuthorizationExpired(error) ? "authorization-expired" : "error", {
       message: humanizeError(error),
@@ -613,6 +755,7 @@ async function transferHere() {
   if (!controller) return;
   try {
     await controller.transferHere();
+    renderSteadyConnection();
     if (!controller.playbackState?.item) {
       showToast("Spool is ready. Start a track in Spotify, then press play here once if needed.", { duration: 4200 });
     } else if (!controller.playbackState?.isPlaying) {
@@ -633,9 +776,212 @@ async function logout() {
   controllerUnsubscribers.forEach((unsubscribe) => unsubscribe());
   controllerUnsubscribers = [];
   controller = undefined;
+  libraryService = undefined;
   auth?.logout();
   renderLoggedOut();
   showToast("Spotify disconnected.");
+}
+
+async function refreshDevices() {
+  if (!controller?.refreshDevices) return;
+  try {
+    await controller.refreshDevices();
+  } catch {
+    renderSettings({ message: "Spotify devices are temporarily unavailable." });
+  }
+}
+
+async function transferToDevice(deviceId) {
+  if (!controller?.transferToDevice) return;
+  try {
+    await controller.transferToDevice(deviceId);
+    renderSteadyConnection();
+    showToast(deviceId === controller.deviceId ? "Listening through Spool." : "Spotify device changed.");
+  } catch (error) {
+    showToast(humanizeError(error));
+  }
+}
+
+async function playTrackNow(uri) {
+  if (!controller?.playNow) {
+    showToast("Wait for the Spool browser player to connect.");
+    return;
+  }
+  try {
+    await controller.playNow(uri);
+    renderSteadyConnection();
+  } catch (error) {
+    showToast(humanizeError(error));
+  }
+}
+
+async function refreshLibrary({ force = false } = {}) {
+  if (!libraryService) {
+    renderLibrarySources({
+      status: "error",
+      message: "Log in to Spotify to open your Library.",
+    });
+    return;
+  }
+  if (librarySources.length && !force) {
+    if (selectedLibrarySource) {
+      renderSelectedLibrary();
+    } else {
+      showLibrarySources();
+    }
+    return;
+  }
+
+  selectedLibrarySource = null;
+  selectedLibraryItems = [];
+  selectedLibraryNextOffset = null;
+  renderLibrarySources({ status: "loading" });
+  try {
+    librarySources = await libraryService.loadSources({ force });
+    showLibrarySources();
+  } catch (error) {
+    console.warn("Spotify library failed to load.", safeDiagnostic(error, "library-sources"));
+    renderLibrarySources({ status: "error", message: humanizeLibraryError(error) });
+  }
+}
+
+function showLibrarySources() {
+  selectedLibrarySource = null;
+  selectedLibraryItems = [];
+  selectedLibraryNextOffset = null;
+  renderLibrarySources({ sources: librarySources });
+}
+
+async function openLibrarySource(sourceId) {
+  const source = librarySources.find((candidate) => candidate.id === sourceId);
+  if (!source?.canBrowse) return;
+  selectedLibrarySource = source;
+  selectedLibraryItems = [];
+  selectedLibraryNextOffset = null;
+  renderLibraryDetail({ source, status: "loading", total: source.total });
+  try {
+    const page = await libraryService.loadSourcePage(source, { offset: 0 });
+    if (selectedLibrarySource?.id !== source.id) return;
+    selectedLibraryItems = page.items;
+    selectedLibraryNextOffset = page.nextOffset;
+    renderLibraryDetail({
+      source,
+      items: selectedLibraryItems,
+      total: page.total,
+      nextOffset: page.nextOffset,
+      message: page.unavailableReason,
+    });
+  } catch (error) {
+    console.warn("Spotify library source failed to load.", safeDiagnostic(error, "library-items"));
+    renderLibraryDetail({
+      source,
+      status: "error",
+      total: source.total,
+      message: humanizeLibraryError(error),
+    });
+  }
+}
+
+async function loadMoreLibraryItems() {
+  if (!selectedLibrarySource || selectedLibraryNextOffset === null) return;
+  const source = selectedLibrarySource;
+  const offset = selectedLibraryNextOffset;
+  selectedLibraryNextOffset = null;
+  renderSelectedLibrary();
+  try {
+    const page = await libraryService.loadSourcePage(source, { offset });
+    if (selectedLibrarySource?.id !== source.id) return;
+    selectedLibraryItems = [...selectedLibraryItems, ...page.items];
+    selectedLibraryNextOffset = page.nextOffset;
+    renderLibraryDetail({
+      source,
+      items: selectedLibraryItems,
+      total: page.total,
+      nextOffset: page.nextOffset,
+      message: page.unavailableReason,
+    });
+  } catch (error) {
+    selectedLibraryNextOffset = offset;
+    showToast(humanizeLibraryError(error));
+    renderSelectedLibrary();
+  }
+}
+
+function renderSelectedLibrary() {
+  if (!selectedLibrarySource) return showLibrarySources();
+  renderLibraryDetail({
+    source: selectedLibrarySource,
+    items: selectedLibraryItems,
+    total: selectedLibrarySource.total,
+    nextOffset: selectedLibraryNextOffset,
+    message: selectedLibrarySource.canBrowse
+      ? null
+      : selectedLibrarySource.unavailableReason,
+  });
+}
+
+function bindVolume() {
+  const range = getElements().volumeRange;
+  if (!range) return;
+  let timer;
+  range.addEventListener("input", () => {
+    currentVolume = Number(range.value);
+    renderVolume();
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      try {
+        await controller?.setVolume?.(currentVolume);
+      } catch (error) {
+        showToast(humanizeError(error));
+        controller?.refreshVolume?.().catch(() => {});
+      }
+    }, 70);
+  });
+}
+
+function renderVolume() {
+  const { volumeRange, volumeValue } = getElements();
+  if (!volumeRange || !volumeValue) return;
+  const volume = Math.min(1, Math.max(0, Number(currentVolume) || 0));
+  volumeRange.value = String(volume);
+  volumeRange.disabled = !controller?.deviceId;
+  volumeValue.textContent = `${Math.round(volume * 100)}%`;
+}
+
+function bindMediaSettings() {
+  getElements().mediaToggle?.addEventListener("click", () => {
+    mediaSessionEnabled = !mediaSessionEnabled;
+    updateMediaPreferences();
+  });
+  getElements().headphoneSkipToggle?.addEventListener("click", () => {
+    headphoneSkipEnabled = !headphoneSkipEnabled;
+    updateMediaPreferences();
+  });
+}
+
+function updateMediaPreferences() {
+  setMediaSessionPreferences({
+    enabled: mediaSessionEnabled,
+    headphoneSkip: headphoneSkipEnabled,
+  });
+  renderMediaSession(currentPlayback);
+  renderSettings();
+  saveUiPreferences();
+}
+
+function renderPreferenceToggle(toggle, active) {
+  if (!toggle) return;
+  toggle.classList.toggle("on", Boolean(active));
+  toggle.setAttribute("aria-checked", String(Boolean(active)));
+}
+
+async function runMediaCommand(command) {
+  if (!controller || !currentPlayback?.activeDevice) return;
+  try {
+    await command();
+  } catch (error) {
+    showToast(humanizeError(error));
+  }
 }
 
 function bindPlaybackButtons() {
@@ -757,7 +1103,14 @@ function bindKeyboard() {
       await runKeyboardCommand(() => controller?.seek((currentPlayback?.positionMs || 0) + delta));
     } else if (event.code === "ArrowUp" || event.code === "ArrowDown") {
       event.preventDefault();
-      explainInactiveFeature(event.shiftKey ? "Playback speed" : "Spotify volume control");
+      if (event.shiftKey) {
+        explainInactiveFeature("Playback speed");
+      } else {
+        const delta = event.code === "ArrowUp" ? 0.05 : -0.05;
+        await runKeyboardCommand(() => controller?.setVolume(
+          Math.min(1, Math.max(0, currentVolume + delta)),
+        ));
+      }
     } else if (event.code === "KeyQ") {
       queueVisible = !queueVisible;
       setQueueVisible(queueVisible);
@@ -804,7 +1157,11 @@ async function runKeyboardCommand(command) {
 }
 
 function reconcilePlayback() {
-  if (!controller || connectionState === "logged-out" || connectionState === "not-configured") return;
+  if (
+    !controller ||
+    ["logged-out", "not-configured", "authorization-expired", "error"].includes(connectionState)
+  ) return;
+  if (!controller.deviceId) controller.connect?.().catch(() => {});
   controller.refreshState?.().catch(() => {});
   if (queueVisible) controller.refreshQueue?.().catch(() => {});
 }
@@ -829,8 +1186,27 @@ function saveUiPreferences() {
       queueVisible,
       dockVisible,
       lyricsVisible,
+      mediaSessionEnabled,
+      headphoneSkipEnabled,
     }));
   } catch {}
+}
+
+function removeLegacyOAuthQuery() {
+  const url = new URL(location.href);
+  if (!url.searchParams.has("oauth") || url.searchParams.has("code") || url.searchParams.has("error")) return;
+  url.searchParams.delete("oauth");
+  history.replaceState(history.state, "", url);
+}
+
+function humanizeLibraryError(error) {
+  if (error instanceof SpotifyApiError && error.status === 403) {
+    return "Spotify returned this playlist's metadata but does not allow this app to read its songs.";
+  }
+  if (error instanceof SpotifyApiError && error.status === 429) {
+    return "Spotify is rate limiting Library requests. Try again shortly.";
+  }
+  return humanizeError(error);
 }
 
 function humanizeError(error) {
@@ -844,7 +1220,7 @@ function humanizeError(error) {
   if (error instanceof SpotifyAuthError) {
     if (error.code === "access_denied") return "Spotify authorization was denied.";
     if (error.code === "insufficient_scope") {
-      return "Spotify did not grant every browser-playback permission. Log in and approve all requested access.";
+      return "Spotify did not grant every permission Spool needs. Log in and approve all requested access.";
     }
     if (error.code === "invalid_state") {
       if (error.details?.reason === "missing_transaction") {

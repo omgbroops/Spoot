@@ -13,6 +13,8 @@ export class SpotifyPlaybackSdk extends Emitter {
   #player = null;
   #deviceId = null;
   #connected = false;
+  #connectPromise = null;
+  #connectionGeneration = 0;
 
   constructor({
     tokenProvider,
@@ -41,8 +43,31 @@ export class SpotifyPlaybackSdk extends Emitter {
     return Boolean(this.#connected && this.#deviceId);
   }
 
-  async connect() {
-    if (this.#player) return this.ready;
+  connect() {
+    if (this.ready) return Promise.resolve(true);
+    if (this.#connectPromise) return this.#connectPromise;
+    const generation = this.#connectionGeneration;
+    const operation = this.#connectPlayer(generation);
+    const tracked = operation.finally(() => {
+      if (this.#connectPromise === tracked) this.#connectPromise = null;
+    });
+    this.#connectPromise = tracked;
+    return tracked;
+  }
+
+  async #connectPlayer(generation) {
+    if (this.#player) {
+      const player = this.#player;
+      this.emit("status", { state: "connecting-player" });
+      const connected = await player.connect();
+      if (!this.#isCurrent(player, generation)) {
+        player.disconnect?.();
+        throw connectionCancelledError();
+      }
+      this.#connected = Boolean(connected);
+      if (!connected) throw new Error("Spotify Web Playback SDK could not reconnect.");
+      return connected;
+    }
 
     this.emit("status", { state: "loading-sdk" });
     const Spotify = await loadSpotifySdk({
@@ -50,10 +75,13 @@ export class SpotifyPlaybackSdk extends Emitter {
       documentRef: this.#document,
       timeoutMs: this.#loadTimeoutMs,
     });
+    if (generation !== this.#connectionGeneration) throw connectionCancelledError();
 
     this.emit("status", { state: "connecting-player" });
     const player = new Spotify.Player({
       name: this.#name,
+      // Spool owns the optional, user-toggleable Media Session integration.
+      enableMediaSession: false,
       getOAuthToken: (callback) => {
         Promise.resolve(this.#tokenProvider.getAccessToken())
           .then((token) => callback(token))
@@ -68,9 +96,13 @@ export class SpotifyPlaybackSdk extends Emitter {
     });
 
     this.#player = player;
-    this.#registerListeners(player);
+    this.#registerListeners(player, generation);
 
     const connected = await player.connect();
+    if (!this.#isCurrent(player, generation)) {
+      player.disconnect?.();
+      throw connectionCancelledError();
+    }
     this.#connected = Boolean(connected);
     if (!connected) {
       this.#player = null;
@@ -109,13 +141,27 @@ export class SpotifyPlaybackSdk extends Emitter {
     return this.#player.seek(Math.max(0, Math.round(positionMs)));
   }
 
-  disconnect() {
-    if (this.#player) {
-      this.#player.disconnect();
+  async getVolume() {
+    this.#assertReady();
+    return this.#player.getVolume();
+  }
+
+  async setVolume(volume) {
+    this.#assertReady();
+    if (!Number.isFinite(volume) || volume < 0 || volume > 1) {
+      throw new RangeError("Player volume must be between 0 and 1.");
     }
+    return this.#player.setVolume(volume);
+  }
+
+  disconnect() {
+    this.#connectionGeneration += 1;
+    const player = this.#player;
     this.#player = null;
+    this.#connectPromise = null;
     this.#deviceId = null;
     this.#connected = false;
+    player?.disconnect?.();
     this.emit("status", { state: "logged-in" });
   }
 
@@ -125,8 +171,10 @@ export class SpotifyPlaybackSdk extends Emitter {
     }
   }
 
-  #registerListeners(player) {
+  #registerListeners(player, generation) {
+    const isCurrent = () => this.#isCurrent(player, generation);
     player.addListener("ready", ({ device_id: deviceId }) => {
+      if (!isCurrent()) return;
       this.#deviceId = deviceId;
       this.#connected = true;
       this.emit("ready", { deviceId });
@@ -134,12 +182,15 @@ export class SpotifyPlaybackSdk extends Emitter {
     });
 
     player.addListener("not_ready", ({ device_id: deviceId }) => {
+      if (!isCurrent()) return;
       if (this.#deviceId === deviceId) this.#deviceId = null;
+      this.#connected = false;
       this.emit("not-ready", { deviceId });
       this.emit("status", { state: "temporarily-unavailable", deviceId });
     });
 
     player.addListener("player_state_changed", (state) => {
+      if (!isCurrent()) return;
       this.emit("state", state);
     });
 
@@ -150,16 +201,32 @@ export class SpotifyPlaybackSdk extends Emitter {
       "playback_error",
     ]) {
       player.addListener(type, ({ message }) => {
+        if (!isCurrent()) return;
+        if (type === "authentication_error") {
+          this.#deviceId = null;
+          this.#connected = false;
+        }
         this.emit("error", { type, message });
       });
     }
 
     player.addListener("autoplay_failed", () => {
+      if (!isCurrent()) return;
       this.emit("autoplay-failed", {
         message: "Press play once to allow browser audio for Spool.",
       });
     });
   }
+
+  #isCurrent(player, generation) {
+    return generation === this.#connectionGeneration && player === this.#player;
+  }
+}
+
+function connectionCancelledError() {
+  const error = new Error("Spotify player connection was cancelled.");
+  error.name = "AbortError";
+  return error;
 }
 
 export function loadSpotifySdk({

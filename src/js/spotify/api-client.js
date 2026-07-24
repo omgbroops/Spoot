@@ -156,6 +156,13 @@ function optionalDeviceQuery(deviceId) {
   return deviceId ? { device_id: deviceId } : undefined;
 }
 
+function assertSpotifyId(id, label = "Spotify item") {
+  if (typeof id !== "string" || !/^[A-Za-z0-9]+$/u.test(id)) {
+    throw new TypeError(`${label} ID is invalid.`);
+  }
+  return id;
+}
+
 export class SpotifyApiError extends Error {
   constructor(
     message,
@@ -315,16 +322,62 @@ export class SpotifyApiClient {
     }
   }
 
-  getPlaybackState({ market, additionalTypes = ["track", "episode"], signal } = {}) {
+  getPlaybackState({
+    market,
+    additionalTypes = ["track", "episode"],
+    signal,
+    dedupe = true,
+  } = {}) {
     return this.request("me/player", {
       query: { market, additional_types: additionalTypes },
       signal,
-      dedupeKey: `playback-state:${market ?? ""}:${additionalTypes.join(",")}`,
+      dedupeKey: dedupe
+        ? `playback-state:${market ?? ""}:${additionalTypes.join(",")}`
+        : undefined,
     });
   }
 
   getAvailableDevices({ signal } = {}) {
     return this.request("me/player/devices", { signal });
+  }
+
+  getCurrentUserProfile({ signal } = {}) {
+    return this.request("me", { signal, dedupeKey: "current-user-profile" });
+  }
+
+  getCurrentUserPlaylists({ limit = 50, offset = 0, signal } = {}) {
+    return this.request("me/playlists", {
+      query: { limit, offset },
+      signal,
+    });
+  }
+
+  getPlaylistItems(
+    playlistId,
+    {
+      limit = 50,
+      offset = 0,
+      market,
+      additionalTypes = ["track", "episode"],
+      signal,
+    } = {},
+  ) {
+    return this.request(`playlists/${assertSpotifyId(playlistId, "Playlist")}/items`, {
+      query: {
+        limit,
+        offset,
+        market,
+        additional_types: additionalTypes,
+      },
+      signal,
+    });
+  }
+
+  getSavedTracks({ limit = 50, offset = 0, market, signal } = {}) {
+    return this.request("me/tracks", {
+      query: { limit, offset, market },
+      signal,
+    });
   }
 
   transferPlayback(deviceId, { play = false, signal } = {}) {
@@ -334,6 +387,20 @@ export class SpotifyApiClient {
     return this.request("me/player", {
       method: "PUT",
       body: { device_ids: [deviceId], play: Boolean(play) },
+      signal,
+    });
+  }
+
+  setPlaybackVolume(volumePercent, { deviceId, signal } = {}) {
+    if (!Number.isFinite(volumePercent) || volumePercent < 0 || volumePercent > 100) {
+      throw new RangeError("Spotify volume must be between 0 and 100.");
+    }
+    return this.request("me/player/volume", {
+      method: "PUT",
+      query: {
+        volume_percent: Math.round(volumePercent),
+        ...optionalDeviceQuery(deviceId),
+      },
       signal,
     });
   }

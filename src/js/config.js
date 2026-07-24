@@ -5,6 +5,9 @@ export const REQUIRED_SPOTIFY_SCOPES = Object.freeze([
   "user-read-playback-state",
   "user-read-currently-playing",
   "user-modify-playback-state",
+  "playlist-read-private",
+  "playlist-read-collaborative",
+  "user-library-read",
 ]);
 
 const PLACEHOLDER_CLIENT_IDS = new Set([

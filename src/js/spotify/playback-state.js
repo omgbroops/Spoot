@@ -63,7 +63,7 @@ function disallowedActions(actions) {
     .map(([action]) => action);
 }
 
-function normalizeDevice(device, fallbackId = null, active = false) {
+export function normalizeSpotifyDevice(device, fallbackId = null, active = false) {
   if (!device && !fallbackId) return null;
   return {
     id: device?.id || fallbackId || null,
@@ -115,7 +115,7 @@ export function createEmptyPlaybackState({
   deviceId = null,
   activeDevice = false,
 } = {}) {
-  const device = normalizeDevice(null, deviceId, activeDevice);
+  const device = normalizeSpotifyDevice(null, deviceId, activeDevice);
   return {
     source,
     sdkReady: Boolean(sdkReady),
@@ -180,7 +180,7 @@ export function normalizeApiPlaybackState(
   }
 
   const item = normalizePlaybackItem(payload.item);
-  const device = normalizeDevice(payload.device);
+  const device = normalizeSpotifyDevice(payload.device);
   const positionMs = nonNegativeNumber(payload.progress_ms);
   const durationMs = item?.durationMs ?? 0;
   const isPlaying = Boolean(payload.is_playing);

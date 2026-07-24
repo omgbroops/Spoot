@@ -3,6 +3,7 @@ import {
   createEmptyPlaybackState,
   normalizeApiPlaybackState,
   normalizeSdkPlaybackState,
+  normalizeSpotifyDevice,
   interpolateProgress,
 } from "./playback-state.js";
 import { normalizeQueueResponse } from "./queue-service.js";
@@ -18,6 +19,10 @@ export class PlaybackController extends Emitter {
   #clearInterval;
   #progressTimer = null;
   #unbindSdk = [];
+  #lifecycleGeneration = 0;
+  #playCommandGeneration = 0;
+  #playCommandTail = Promise.resolve();
+  #destroyed = false;
 
   constructor({
     apiClient,
@@ -43,16 +48,26 @@ export class PlaybackController extends Emitter {
     this.deviceId = null;
     this.playbackState = createEmptyPlaybackState();
     this.queue = normalizeQueueResponse(null);
+    this.devices = [];
+    this.volume = 1;
     this.#bindSdk();
   }
 
   async connect() {
+    if (this.#destroyed) throw new Error("This playback controller has been closed.");
+    const generation = this.#lifecycleGeneration;
     this.#setConnection("loading-sdk");
     try {
       const connected = await this.#sdk.connect();
+      if (this.#destroyed || generation !== this.#lifecycleGeneration) return false;
       this.#startProgressLoop();
       return connected;
     } catch (error) {
+      if (
+        this.#destroyed ||
+        generation !== this.#lifecycleGeneration ||
+        error?.name === "AbortError"
+      ) return false;
       this.#setConnection("error", { message: error.message });
       this.emit("error", { message: error.message, error });
       throw error;
@@ -60,13 +75,17 @@ export class PlaybackController extends Emitter {
   }
 
   async disconnect() {
+    this.#lifecycleGeneration += 1;
+    this.#playCommandGeneration += 1;
     this.#stopProgressLoop();
-    this.#sdk.disconnect();
+    await this.#sdk.disconnect();
     this.deviceId = null;
     this.playbackState = createEmptyPlaybackState();
     this.queue = normalizeQueueResponse(null);
+    this.devices = [];
     this.emit("state", this.playbackState);
     this.emit("queue", this.queue);
+    this.emit("devices", this.devices);
     this.#setConnection("logged-in");
   }
 
@@ -84,7 +103,7 @@ export class PlaybackController extends Emitter {
       await activation;
       await this.#api.transferPlayback(this.deviceId, { play: false });
       const [state] = await Promise.all([
-        this.refreshState(),
+        this.refreshState({ fresh: true }),
         this.refreshQueue().catch(() => this.queue),
       ]);
       this.#setConnection(state?.activeDevice ? "active" : "player-ready");
@@ -96,6 +115,76 @@ export class PlaybackController extends Emitter {
     }
   }
 
+  async transferToDevice(deviceId) {
+    if (deviceId === this.deviceId) return this.transferHere();
+    const device = this.devices.find((candidate) => candidate.id === deviceId);
+    if (!deviceId || !device || device.isRestricted) {
+      throw new Error("That Spotify device cannot accept playback commands.");
+    }
+
+    this.#setConnection("transferring-playback", {
+      message: `Moving playback to ${device?.name || "the selected device"}…`,
+    });
+    try {
+      await this.#api.transferPlayback(deviceId, { play: false });
+      await Promise.all([
+        this.refreshState({ fresh: true }),
+        this.refreshDevices(),
+        this.refreshQueue().catch(() => this.queue),
+      ]);
+      this.#setConnection("player-ready");
+      return true;
+    } catch (error) {
+      this.#setConnection("player-ready", { message: error.message });
+      this.#emitCommandError("Spotify rejected the device transfer.", error);
+      throw error;
+    }
+  }
+
+  async playNow(uri) {
+    if (!this.deviceId) {
+      throw new Error("Wait for the Spool playback device to become ready.");
+    }
+
+    // Begin audio activation inside the click call stack, then serialize direct
+    // plays so rapid clicks always leave the most recently selected track active.
+    const activation = Promise.resolve(this.#sdk.activateElement());
+    const commandGeneration = ++this.#playCommandGeneration;
+    const operation = this.#playCommandTail.catch(() => {}).then(async () => {
+      if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
+      this.#setConnection("transferring-playback");
+      try {
+        await activation;
+        if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
+
+        // Start Playback can target Spool directly. Avoid a preceding Transfer
+        // Playback command because Spotify does not guarantee Player command order.
+        await this.#api.startPlayback({
+          deviceId: this.deviceId,
+          uris: [uri],
+          positionMs: 0,
+        });
+        if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
+
+        const [state] = await Promise.all([
+          this.refreshState({ fresh: true }),
+          this.refreshDevices(),
+          this.refreshQueue().catch(() => this.queue),
+        ]);
+        if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
+        this.#setConnection(state?.activeDevice ? "active" : "player-ready");
+        return true;
+      } catch (error) {
+        if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
+        this.#setConnection("player-ready", { message: error.message });
+        this.#emitCommandError("Spotify could not start that song.", error);
+        throw error;
+      }
+    });
+    this.#playCommandTail = operation;
+    return operation;
+  }
+
   async togglePlay() {
     const action = this.playbackState?.paused ? "resuming" : "pausing";
     this.#assertActionAllowed(action);
@@ -105,10 +194,10 @@ export class PlaybackController extends Emitter {
         await this.#sdk.togglePlay();
       } else if (this.playbackState?.paused) {
         await this.#api.startPlayback({ deviceId: this.deviceId });
-        await this.refreshState();
+        await this.refreshState({ fresh: true });
       } else {
         await this.#api.pausePlayback({ deviceId: this.deviceId });
-        await this.refreshState();
+        await this.refreshState({ fresh: true });
       }
     } catch (error) {
       this.#emitCommandError("Spotify rejected the play/pause command.", error);
@@ -150,7 +239,7 @@ export class PlaybackController extends Emitter {
         });
       } else {
         await this.#api.seek(position, { deviceId: this.deviceId });
-        await this.refreshState();
+        await this.refreshState({ fresh: true });
       }
     } catch (error) {
       this.#emitCommandError("Spotify rejected the seek command.", error);
@@ -161,7 +250,7 @@ export class PlaybackController extends Emitter {
   async setShuffle(enabled) {
     try {
       await this.#api.setShuffle(Boolean(enabled), { deviceId: this.deviceId });
-      return await this.refreshState();
+      return await this.refreshState({ fresh: true });
     } catch (error) {
       this.#emitCommandError("Spotify rejected the shuffle command.", error);
       throw error;
@@ -173,7 +262,7 @@ export class PlaybackController extends Emitter {
     const nextMode = REPEAT_ORDER[(REPEAT_ORDER.indexOf(current) + 1) % REPEAT_ORDER.length];
     try {
       await this.#api.setRepeat(nextMode, { deviceId: this.deviceId });
-      await this.refreshState();
+      await this.refreshState({ fresh: true });
       return this.playbackState.repeatMode;
     } catch (error) {
       this.#emitCommandError("Spotify rejected the repeat command.", error);
@@ -181,9 +270,9 @@ export class PlaybackController extends Emitter {
     }
   }
 
-  async refreshState({ signal } = {}) {
+  async refreshState({ signal, fresh = false } = {}) {
     try {
-      const payload = await this.#api.getPlaybackState({ signal });
+      const payload = await this.#api.getPlaybackState({ signal, dedupe: !fresh });
       const normalized = normalizeApiPlaybackState(payload, {
         receivedAt: this.#now(),
         sdkReady: this.#sdk.ready,
@@ -213,6 +302,54 @@ export class PlaybackController extends Emitter {
       });
       throw error;
     }
+  }
+
+  async refreshDevices({ signal } = {}) {
+    try {
+      const payload = await this.#api.getAvailableDevices({ signal });
+      const devices = Array.isArray(payload?.devices)
+        ? payload.devices.map((device) => normalizeSpotifyDevice(device)).filter(Boolean)
+        : [];
+      if (this.deviceId && !devices.some((device) => device.id === this.deviceId)) {
+        devices.unshift(normalizeSpotifyDevice(
+          { id: this.deviceId, name: "Spool", type: "Computer" },
+          this.deviceId,
+          Boolean(this.playbackState?.activeDevice),
+        ));
+      }
+      this.devices = devices;
+      this.emit("devices", devices);
+      return devices;
+    } catch (error) {
+      this.emit("error", {
+        message: error?.message || "Spotify devices are temporarily unavailable.",
+        error,
+        operation: "refresh-devices",
+      });
+      throw error;
+    }
+  }
+
+  async refreshVolume() {
+    if (!this.#sdk.ready || typeof this.#sdk.getVolume !== "function") return this.volume;
+    const volume = await this.#sdk.getVolume();
+    this.volume = Math.min(1, Math.max(0, Number(volume) || 0));
+    this.emit("volume", this.volume);
+    return this.volume;
+  }
+
+  async setVolume(volume) {
+    if (!this.#sdk.ready || typeof this.#sdk.setVolume !== "function") {
+      throw new Error("The Spool browser player is not ready for volume control.");
+    }
+    const normalized = Number(volume);
+    if (!Number.isFinite(normalized) || normalized < 0 || normalized > 1) {
+      throw new RangeError("Player volume must be between 0 and 1.");
+    }
+    await this.#sdk.setVolume(normalized);
+    this.volume = normalized;
+    this.emit("volume", normalized);
+    return normalized;
   }
 
   async refreshQueue({ signal } = {}) {
@@ -247,9 +384,14 @@ export class PlaybackController extends Emitter {
   }
 
   destroy() {
+    if (this.#destroyed) return;
+    this.#destroyed = true;
+    this.#lifecycleGeneration += 1;
+    this.#playCommandGeneration += 1;
     this.#stopProgressLoop();
     for (const unbind of this.#unbindSdk) unbind();
     this.#unbindSdk = [];
+    this.#sdk.disconnect?.();
     this.clear();
   }
 
@@ -259,7 +401,7 @@ export class PlaybackController extends Emitter {
       if (this.#sdk.ready) await sdkCommand();
       else {
         await apiCommand();
-        await this.refreshState();
+        await this.refreshState({ fresh: true });
       }
       await this.refreshQueue().catch(() => this.queue);
     } catch (error) {
@@ -283,7 +425,12 @@ export class PlaybackController extends Emitter {
         };
         this.emit("state", this.playbackState);
         this.emit("ready", { deviceId });
-        Promise.allSettled([this.refreshState(), this.refreshQueue()]);
+        Promise.allSettled([
+          this.refreshState(),
+          this.refreshQueue(),
+          this.refreshDevices(),
+          this.refreshVolume(),
+        ]);
       }),
       this.#sdk.on("not-ready", ({ deviceId }) => {
         if (this.deviceId === deviceId) this.deviceId = null;
@@ -295,6 +442,7 @@ export class PlaybackController extends Emitter {
           spoolDeviceId: null,
         };
         this.emit("state", this.playbackState);
+        this.refreshDevices().catch(() => {});
       }),
       this.#sdk.on("state", (payload) => {
         if (!payload) {
@@ -338,6 +486,16 @@ export class PlaybackController extends Emitter {
         const state = event.type === "authentication_error"
           ? "authorization-expired"
           : "error";
+        if (event.type === "authentication_error") {
+          this.deviceId = null;
+          this.#applyPlaybackState({
+            ...this.playbackState,
+            sdkReady: false,
+            deviceReady: false,
+            activeDevice: false,
+            spoolDeviceId: null,
+          });
+        }
         this.#setConnection(state, { message: event.message });
         this.emit("error", event);
       }),

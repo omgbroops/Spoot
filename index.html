@@ -119,29 +119,29 @@
   <section class="modal glass" id="modal-library" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="lib-title">
     <div class="modal-head" data-drag-handle>
       <div class="modal-title" id="lib-title">Library</div>
-      <div class="head-btns"><button class="head-ic inactive-control" id="lib-new" type="button" title="Playlist editing is not connected in this pass" data-inactive-feature="Playlist editing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg></button><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="head-btns"><button class="head-ic inactive-control" id="lib-new" type="button" title="Playlist editing is not connected in this pass" aria-label="Create playlist (unavailable)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg></button><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     </div>
-    <div class="modal-body"><div class="empty">Spotify library browsing is not connected in this pass.</div></div>
+    <div class="modal-body library-body" id="library-content"><div class="empty">Open Library to load your Spotify collection.</div></div>
   </section>
 
   <section class="modal glass" id="modal-eq" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="sound-title">
     <div class="modal-head" data-drag-handle><div class="modal-title" id="sound-title">Sound</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
-    <div class="modal-body inactive-surface" data-inactive-feature="Sound controls" title="Sound controls are preserved but not connected to Spotify in this pass">
-      <div class="setting"><div class="setting-label">Speed <span class="val" id="speed-val">1.00×</span></div><input type="range" id="speed-range" min="0.25" max="2.5" step="0.01" value="1" tabindex="-1"></div>
-      <div class="setting"><div class="setting-label">Volume <span class="val" id="vol-val">100%</span></div><input type="range" id="vol-range" min="0" max="1" step="0.01" value="1" tabindex="-1"></div>
-      <div class="setting"><div class="setting-label">Reverb <span class="val" id="rev-val">0%</span></div><input type="range" id="rev-range" min="0" max="1" step="0.01" value="0" tabindex="-1"></div>
-      <div class="row-setting"><div class="name">Crossfade <span class="val" id="cf-val">6s</span></div><div class="toggle" id="tg-cf" aria-hidden="true"></div></div>
-      <div class="setting sound-subsetting"><input type="range" id="cf-range" min="0" max="12" step="1" value="6" tabindex="-1"></div>
-      <div class="row-setting"><div class="name">Gapless playback</div><div class="toggle" id="tg-gapless" aria-hidden="true"></div></div>
-      <div class="setting eq-setting"><div class="setting-label">Equalizer <div class="toggle on" id="tg-eq" aria-hidden="true"></div></div><div class="eq-presets" id="eq-presets"><button class="chip active" type="button" tabindex="-1">Flat</button><button class="chip" type="button" tabindex="-1">Bass Boost</button><button class="chip" type="button" tabindex="-1">Vocal</button><button class="chip" type="button" tabindex="-1">Treble</button><button class="chip" type="button" tabindex="-1">Lo-Fi</button><button class="chip" type="button" tabindex="-1">Podcast</button></div><div class="eq-wrap" id="eq-wrap">
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">60</span></label>
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">150</span></label>
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">400</span></label>
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">1k</span></label>
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">2.4k</span></label>
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">6k</span></label>
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">9k</span></label>
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">14k</span></label>
+    <div class="modal-body">
+      <div class="setting volume-setting"><div class="setting-label">Spool volume <span class="val" id="vol-val">100%</span></div><input type="range" id="vol-range" min="0" max="1" step="0.01" value="1" disabled></div>
+      <div class="setting inactive-surface inactive-control" data-inactive-feature="Playback speed"><div class="setting-label">Speed <span class="val" id="speed-val">1.00×</span></div><input type="range" id="speed-range" min="0.25" max="2.5" step="0.01" value="1" disabled></div>
+      <div class="setting inactive-surface inactive-control" data-inactive-feature="Reverb"><div class="setting-label">Reverb <span class="val" id="rev-val">0%</span></div><input type="range" id="rev-range" min="0" max="1" step="0.01" value="0" disabled></div>
+      <div class="row-setting inactive-surface inactive-control" data-inactive-feature="Crossfade"><div class="name">Crossfade <span class="val" id="cf-val">6s</span></div><div class="toggle" id="tg-cf" aria-hidden="true"></div></div>
+      <div class="setting sound-subsetting inactive-surface"><input type="range" id="cf-range" min="0" max="12" step="1" value="6" disabled></div>
+      <div class="row-setting inactive-surface inactive-control" data-inactive-feature="Gapless playback"><div class="name">Gapless playback</div><div class="toggle" id="tg-gapless" aria-hidden="true"></div></div>
+      <div class="setting eq-setting inactive-surface inactive-control" data-inactive-feature="Equalizer"><div class="setting-label">Equalizer <div class="toggle on" id="tg-eq" aria-hidden="true"></div></div><div class="eq-presets" id="eq-presets"><button class="chip active" type="button" disabled>Flat</button><button class="chip" type="button" disabled>Bass Boost</button><button class="chip" type="button" disabled>Vocal</button><button class="chip" type="button" disabled>Treble</button><button class="chip" type="button" disabled>Lo-Fi</button><button class="chip" type="button" disabled>Podcast</button></div><div class="eq-wrap" id="eq-wrap">
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">60</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">150</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">400</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">1k</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">2.4k</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">6k</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">9k</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">14k</span></label>
       </div></div>
     </div>
   </section>
@@ -151,14 +151,23 @@
     <div class="modal-body">
       <div class="setting-label">Spotify</div>
       <div class="row-setting spotify-setting"><div><div class="name" id="spotify-account-status">Not connected</div><div class="setting-note" id="spotify-device-status">Spool device unavailable</div></div><div class="btn-row"><button class="btn primary" id="settings-connect" type="button">Log in</button><button class="btn" id="settings-transfer" type="button" hidden>Use Spool</button><button class="btn" id="settings-disconnect" type="button" hidden>Log out</button></div></div>
+      <div class="device-picker" id="device-picker" hidden>
+        <button class="device-trigger" id="device-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="device-list" aria-labelledby="device-trigger-label device-trigger-name">
+          <span><span class="device-trigger-label" id="device-trigger-label">Listening device</span><strong id="device-trigger-name">Choose a listening device</strong></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
+        </button>
+        <div class="device-menu glass" id="device-list" role="listbox" aria-label="Spotify devices" hidden></div>
+      </div>
+      <div class="media-settings">
+        <div class="row-setting"><div><div class="name">Show song in media player</div><div class="setting-note">Share Spool playback with system media controls</div></div><button class="toggle on" id="tg-media" type="button" role="switch" aria-checked="true" aria-label="Show song in media player"></button></div>
+        <div class="row-setting"><div><div class="name">Headphone click → skip</div><div class="setting-note">Enable previous and next media-key actions</div></div><button class="toggle" id="tg-clickskip" type="button" role="switch" aria-checked="false" aria-label="Headphone click skips tracks"></button></div>
+      </div>
       <div class="legacy-settings inactive-surface" data-inactive-feature="Legacy player settings" title="These settings are preserved but not connected to Spotify in this pass">
-        <div class="row-setting"><div class="name">Show song in media player</div><div class="toggle on" id="tg-media" aria-hidden="true"></div></div>
-        <div class="row-setting"><div class="name">Headphone click → skip</div><div class="toggle" id="tg-clickskip" aria-hidden="true"></div></div>
         <div class="row-setting"><div class="name">Ambient audio reaction</div><div class="toggle" id="tg-viz" aria-hidden="true"></div></div>
         <div class="row-setting"><div class="name">Sleep timer</div><span class="val">Off</span></div>
         <div class="row-setting"><div class="name">Dropbox</div><span class="val">Not connected</span></div>
-        <div class="row-setting"><div class="name">Listening stats</div><button class="btn" id="btn-stats" type="button" tabindex="-1">View</button></div>
-        <div class="row-setting"><div class="name">Local player data</div><button class="btn" id="btn-clear" type="button" tabindex="-1">Clear all</button></div>
+        <div class="row-setting"><div class="name">Listening stats</div><button class="btn" id="btn-stats" type="button" disabled>View</button></div>
+        <div class="row-setting"><div class="name">Local player data</div><button class="btn" id="btn-clear" type="button" disabled>Clear all</button></div>
       </div>
       <div class="setting-label shortcuts-label">Shortcuts</div>
       <div class="kbd-grid" id="kbd-grid">
@@ -220,6 +229,6 @@
 
   <div id="blank" aria-hidden="true"></div>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./src/js/app.js?v=20260723-oauth11"></script>
+  <script type="module" src="./src/js/app.js?v=20260723-library1"></script>
 </body>
 </html>

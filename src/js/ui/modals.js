@@ -17,7 +17,7 @@ export function setupModals(options = {}) {
   const triggerMap = { ...DEFAULT_TRIGGERS, ...(options.triggers || {}) };
   const removeListeners = [];
 
-  elements.modals.forEach((modal) => modal.setAttribute('aria-hidden', 'true'));
+  elements.modals.forEach((modal) => setModalClosed(modal, true));
 
   Object.entries(triggerMap).forEach(([triggerId, modalId]) => {
     const trigger = document.getElementById(triggerId);
@@ -39,9 +39,30 @@ export function setupModals(options = {}) {
 
   const onScrim = () => closeModals();
   const onKeyDown = (event) => {
-    if (event.key !== 'Escape' || !activeModal) return;
-    event.preventDefault();
-    closeModals();
+    if (!activeModal) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeModals();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+
+    const focusable = getFocusable(activeModal);
+    if (!focusable.length) {
+      event.preventDefault();
+      activeModal.setAttribute('tabindex', '-1');
+      activeModal.focus({ preventScroll: true });
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !activeModal.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus({ preventScroll: true });
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus({ preventScroll: true });
+    }
   };
   elements.scrim?.addEventListener('click', onScrim);
   window.addEventListener('keydown', onKeyDown);
@@ -66,7 +87,7 @@ export function openModal(idOrElement, options = {}) {
   modal.style.removeProperty('margin');
   modal.style.removeProperty('transform');
   modal.classList.add('show');
-  modal.setAttribute('aria-hidden', 'false');
+  setModalClosed(modal, false);
   getElements().scrim?.classList.add('show');
   document.body.classList.add('modal-open');
   requestAnimationFrame(() => modal.querySelector('[data-close], button, input')?.focus({ preventScroll: true }));
@@ -78,7 +99,7 @@ export function closeModals(options = {}) {
   const modal = activeModal;
   getElements().modals.forEach((item) => {
     item.classList.remove('show');
-    item.setAttribute('aria-hidden', 'true');
+    setModalClosed(item, true);
   });
   getElements().scrim?.classList.remove('show');
   document.body.classList.remove('modal-open');
@@ -103,4 +124,16 @@ export function getOpenModal() {
 
 export function isModalOpen(id) {
   return Boolean(activeModal && (!id || activeModal.id === id));
+}
+
+function setModalClosed(modal, closed) {
+  modal.setAttribute('aria-hidden', String(closed));
+  if (closed) modal.setAttribute('inert', '');
+  else modal.removeAttribute('inert');
+}
+
+function getFocusable(container) {
+  return [...container.querySelectorAll(
+    'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+  )].filter((element) => !element.hidden && element.getClientRects().length > 0);
 }

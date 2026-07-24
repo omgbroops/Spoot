@@ -11,10 +11,14 @@ backend, or Spotify Client Secret.
 ## What works
 
 - Spotify Authorization Code with PKCE and session restoration
-- a Web Playback SDK device named `Spool`
-- user-triggered playback transfer into the browser
+- automatic registration of a Web Playback SDK device named `Spool`
+- a device-aware **Listen here** handoff and custom Spotify Connect picker
 - play/pause, previous/next, seeking, shuffle, and repeat
+- live browser volume, Media Session metadata, and optional media-key skipping
 - normalized Spotify playback state, artwork, progress, and queue rendering
+- click-to-play for ordinary song rows in Up Next
+- Liked Songs plus owned/collaborative playlist browsing and playback
+- metadata-only display for followed playlists Spotify will not expose
 - draggable widget positions and responsive immersive mode
 - an explicit mock adapter that exercises the same controller and UI boundary
 
@@ -51,6 +55,8 @@ and [Web Playback SDK requirements](https://developer.spotify.com/documentation/
 The SDK currently requires `streaming`, `user-read-private`, and
 `user-read-email`; Spool requests the email scope for SDK authorization but
 does not read, display, or store the account's email address.
+Library access additionally uses `user-library-read`, `playlist-read-private`,
+and `playlist-read-collaborative`.
 
 1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
 2. Register this exact redirect URI: `http://127.0.0.1:5173/`
@@ -74,9 +80,15 @@ does not read, display, or store the account's email address.
    the same in-memory authorization instance that created the temporary PKCE
    verifier can validate Spotify's callback. The popup hands the callback to
    that tab through a same-origin browser channel and closes after the token
-   exchange succeeds. Then choose **Connect player**. When Spool reports that
-   the device is ready, choose **Use Spool**. If the browser blocks autoplay,
-   press play once to unlock audio.
+   exchange succeeds. Spool registers its browser player automatically without
+   stealing playback. If Spotify is active elsewhere, the banner names that
+   device and offers **Listen here**; the same devices are available from the
+   custom picker in Settings. If the browser blocks autoplay, press play once
+   to unlock audio.
+
+The address bar should remain at the root URL. Query strings such as
+`?oauth=11` were temporary development cache busters and are not required;
+Spool removes that legacy parameter if it is present.
 
 Do not use `localhost`, a different port, or `file://`; Spotify compares the
 redirect URI exactly. The complete authenticated procedure is in
@@ -96,11 +108,21 @@ check.
 
 ## Scope
 
-This release is intentionally a focused playback client. Lyrics, local-file and
-Dropbox import, library/search/discovery, playlist editing, recommendations,
-statistics, sleep timer, full queue editing, and the preserved Sound controls
-are not connected. Those surfaces remain visible and clearly inactive; they do
-not report fake success or control a hidden local audio engine.
+This release is intentionally a focused playback client. Library browsing is
+limited to data Spotify's current Web API actually returns. Spotify does not
+[return playlist folders](https://developer.spotify.com/documentation/web-api/concepts/playlists),
+has no public DJ-library endpoint, and [current Development Mode](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide)
+only exposes playlist contents for playlists the current user owns or
+collaborates on. Followed Spotify/editorial/generated playlists that appear in
+`/me/playlists` stay visible as grey metadata-only rows instead of pretending
+to be empty.
+
+Lyrics, search/discovery, local-file and Dropbox import, playlist editing,
+recommendations, statistics, sleep timer, full queue editing, playback speed,
+EQ, reverb, crossfade, and gapless controls remain inactive. The Sound modal's
+Spool volume is the deliberate exception and controls only the browser SDK
+device. No inactive surface reports fake success or controls a hidden local
+audio engine.
 
 The original local player is preserved, unchanged, under [`reference/`](./reference/README.md).
 See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for runtime boundaries and
