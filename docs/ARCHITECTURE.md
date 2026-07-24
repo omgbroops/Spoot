@@ -155,10 +155,13 @@ Inactive legacy surfaces are identified in markup and resolve to a disabled
 state or an explanatory toast. They never dispatch playback commands. Browser
 volume still goes through Spotify's player volume API, while speed, EQ, reverb,
 and ambient audio reaction use a small Web Audio capture layer installed before
-the Spotify Web Playback SDK creates its media graph. Crossfade and gapless
-remain isolated. Spool owns an optional Media Session adapter so the existing
-system-media and headphone-skip settings can change without competing with the
-SDK's disabled built-in Media Session integration.
+the Spotify Web Playback SDK creates its media graph. If Spotify keeps playback
+inside a cross-origin frame that page JavaScript cannot reach, those controls
+stay disabled rather than pretending to affect an inaccessible stream. Crossfade
+and gapless remain isolated. Spool owns an optional Media
+Session adapter so the existing system-media and headphone-skip settings can
+change without competing with the SDK's disabled built-in Media Session
+integration.
 
 ## Storage ownership
 

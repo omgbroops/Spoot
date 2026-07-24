@@ -1305,15 +1305,22 @@ function renderSoundSettings() {
   const elements = getElements();
   const speed = Math.min(2.5, Math.max(0.25, Number(soundSettings.speed) || 1));
   const reverb = Math.min(1, Math.max(0, Number(soundSettings.reverb) || 0));
+  const captured = audioEffects.hasCapture();
 
-  if (elements.speedRange) elements.speedRange.value = String(speed);
+  if (elements.speedRange) {
+    elements.speedRange.value = String(speed);
+    elements.speedRange.disabled = !captured;
+  }
   if (elements.speedValue) elements.speedValue.textContent = `${speed.toFixed(2)}x`;
-  if (elements.reverbRange) elements.reverbRange.value = String(reverb);
+  if (elements.reverbRange) {
+    elements.reverbRange.value = String(reverb);
+    elements.reverbRange.disabled = !captured;
+  }
   if (elements.reverbValue) elements.reverbValue.textContent = `${Math.round(reverb * 100)}%`;
   if (elements.soundCaptureStatus) {
-    elements.soundCaptureStatus.textContent = audioEffects.hasCapture()
+    elements.soundCaptureStatus.textContent = captured
       ? "Audio output captured"
-      : "Audio output not captured yet";
+      : "Spotify audio is not exposed to page capture";
   }
   if (elements.eqValue) {
     elements.eqValue.textContent = soundSettings.eqPreset === "Flat"
@@ -1323,9 +1330,11 @@ function renderSoundSettings() {
 
   elements.eqSliders.forEach((slider, index) => {
     slider.value = String(soundSettings.eq[index] ?? 0);
+    slider.disabled = !captured;
   });
   elements.eqPresets?.querySelectorAll("[data-preset]").forEach((button) => {
     button.classList.toggle("active", button.dataset.preset === soundSettings.eqPreset);
+    button.disabled = !captured;
   });
 }
 
