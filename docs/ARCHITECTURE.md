@@ -153,7 +153,9 @@ glass listbox; restricted or identifier-less devices remain disabled.
 
 Inactive legacy surfaces are identified in markup and resolve to a disabled
 state or an explanatory toast. They never dispatch playback commands. Browser
-volume is the only live Sound control; speed, EQ, reverb, crossfade, and gapless
+volume still goes through Spotify's player volume API, while speed, EQ, reverb,
+and ambient audio reaction use a small Web Audio capture layer installed before
+the Spotify Web Playback SDK creates its media graph. Crossfade and gapless
 remain isolated. Spool owns an optional Media Session adapter so the existing
 system-media and headphone-skip settings can change without competing with the
 SDK's disabled built-in Media Session integration.

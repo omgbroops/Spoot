@@ -24,14 +24,13 @@ test("the immutable original player reference still matches its recorded hash", 
   assert.equal(actual, recorded);
 });
 
-test("Spotify runtime cannot initialize the dormant local audio engine", () => {
+test("Spotify runtime cannot initialize the dormant local library engine", () => {
   const runtime = walk(join(root, "src/js"))
     .filter((path) => extname(path) === ".js")
     .map((path) => readFileSync(path, "utf8"))
     .join("\n");
 
   assert.doesNotMatch(runtime, /\bnew\s+(?:window\.)?Audio\s*\(/);
-  assert.doesNotMatch(runtime, /\b(?:AudioContext|webkitAudioContext)\b/);
   assert.doesNotMatch(runtime, /indexedDB\.open\s*\(\s*["']musicplayer["']/);
   assert.doesNotMatch(runtime, /\bclient_secret\b/i);
   assert.doesNotMatch(runtime, /\bDROPBOX_APP_KEY\b/);

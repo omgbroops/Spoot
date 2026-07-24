@@ -933,6 +933,12 @@ button.toggle {
   border-bottom: 0.5px solid var(--stroke-soft);
 }
 
+.sound-capture-status {
+  margin: -2px 0 13px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
 .legacy-settings {
   margin-top: 12px;
   border-top: 0.5px solid var(--stroke-soft);

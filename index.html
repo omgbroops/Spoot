@@ -149,21 +149,22 @@
   <section class="modal glass" id="modal-eq" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="sound-title">
     <div class="modal-head" data-drag-handle><div class="modal-title" id="sound-title">Sound</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="modal-body">
+      <div class="sound-capture-status" id="sound-capture-status">Audio output not captured yet</div>
       <div class="setting volume-setting"><div class="setting-label">Spool volume <span class="val" id="vol-val">100%</span></div><input type="range" id="vol-range" min="0" max="1" step="0.01" value="1" disabled></div>
-      <div class="setting inactive-surface inactive-control" data-inactive-feature="Playback speed" data-inactive-message="Disabled."><div class="setting-label">Speed <span class="val">Unavailable</span></div><input type="range" id="speed-range" min="0.25" max="2.5" step="0.01" value="1" disabled></div>
-      <div class="setting inactive-surface inactive-control" data-inactive-feature="Reverb" data-inactive-message="Disabled."><div class="setting-label">Reverb <span class="val">Unavailable</span></div><input type="range" id="rev-range" min="0" max="1" step="0.01" value="0" disabled></div>
+      <div class="setting"><div class="setting-label">Speed <span class="val" id="speed-val">1.00x</span></div><input type="range" id="speed-range" min="0.25" max="2.5" step="0.01" value="1"></div>
+      <div class="setting"><div class="setting-label">Reverb <span class="val" id="rev-val">0%</span></div><input type="range" id="rev-range" min="0" max="1" step="0.01" value="0"></div>
       <div class="row-setting inactive-surface inactive-control" data-inactive-feature="Crossfade" data-inactive-message="Disabled."><div class="name">Crossfade</div><span class="val">Unavailable</span></div>
       <div class="setting sound-subsetting inactive-surface"><input type="range" id="cf-range" min="0" max="12" step="1" value="6" disabled></div>
       <div class="row-setting inactive-surface inactive-control" data-inactive-feature="Gapless playback" data-inactive-message="Disabled."><div class="name">Gapless playback</div><span class="val">Unavailable</span></div>
-      <div class="setting eq-setting inactive-surface inactive-control" data-inactive-feature="Equalizer" data-inactive-message="Disabled."><div class="setting-label">Equalizer <span class="val">Unavailable</span></div><div class="eq-presets" id="eq-presets"><button class="chip active" type="button" disabled>Flat</button><button class="chip" type="button" disabled>Bass Boost</button><button class="chip" type="button" disabled>Vocal</button><button class="chip" type="button" disabled>Treble</button><button class="chip" type="button" disabled>Lo-Fi</button><button class="chip" type="button" disabled>Podcast</button></div><div class="eq-wrap" id="eq-wrap">
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">60</span></label>
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">150</span></label>
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">400</span></label>
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">1k</span></label>
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">2.4k</span></label>
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">6k</span></label>
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">9k</span></label>
-        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">14k</span></label>
+      <div class="setting eq-setting"><div class="setting-label">Equalizer <span class="val" id="eq-val">Flat</span></div><div class="eq-presets" id="eq-presets"><button class="chip active" type="button" data-preset="Flat">Flat</button><button class="chip" type="button" data-preset="Bass Boost">Bass Boost</button><button class="chip" type="button" data-preset="Vocal">Vocal</button><button class="chip" type="button" data-preset="Treble">Treble</button><button class="chip" type="button" data-preset="Lo-Fi">Lo-Fi</button><button class="chip" type="button" data-preset="Podcast">Podcast</button></div><div class="eq-wrap" id="eq-wrap">
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" step="0.5" value="0"><span class="eq-freq">60</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" step="0.5" value="0"><span class="eq-freq">150</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" step="0.5" value="0"><span class="eq-freq">400</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" step="0.5" value="0"><span class="eq-freq">1k</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" step="0.5" value="0"><span class="eq-freq">2.4k</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" step="0.5" value="0"><span class="eq-freq">6k</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" step="0.5" value="0"><span class="eq-freq">9k</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" step="0.5" value="0"><span class="eq-freq">14k</span></label>
       </div></div>
     </div>
   </section>
@@ -184,10 +185,10 @@
         <div class="row-setting"><div><div class="name">Show song in media player</div><div class="setting-note">Share Spool playback with system media controls</div></div><button class="toggle on" id="tg-media" type="button" role="switch" aria-checked="true" aria-label="Show song in media player"></button></div>
         <div class="row-setting"><div><div class="name">Headphone click → skip</div><div class="setting-note">Enable previous and next media-key actions</div></div><button class="toggle" id="tg-clickskip" type="button" role="switch" aria-checked="false" aria-label="Headphone click skips tracks"></button></div>
       </div>
-      <div class="legacy-settings inactive-surface" data-inactive-feature="Legacy player settings" title="These settings are preserved but not connected to Spotify in this pass">
-        <div class="row-setting" data-inactive-feature="Ambient audio reaction" data-inactive-message="Spotify does not expose analyser data for its encrypted browser stream."><div class="name">Ambient audio reaction</div><span class="val">Unavailable</span></div>
-        <div class="row-setting"><div class="name">Sleep timer</div><span class="val">Off</span></div>
-        <div class="row-setting"><div class="name">Dropbox</div><span class="val">Not connected</span></div>
+      <div class="legacy-settings">
+        <div class="row-setting"><div><div class="name">Ambient audio reaction</div><div class="setting-note">React the artwork glow to captured playback</div></div><button class="toggle" id="tg-ambient" type="button" role="switch" aria-checked="false" aria-label="Ambient audio reaction"></button></div>
+        <div class="row-setting inactive-surface"><div class="name">Sleep timer</div><span class="val">Off</span></div>
+        <div class="row-setting inactive-surface"><div class="name">Dropbox</div><span class="val">Not connected</span></div>
         <div class="row-setting"><div class="name">Listening stats</div><button class="btn" id="btn-stats" type="button" disabled>View</button></div>
         <div class="row-setting"><div class="name">Local player data</div><button class="btn" id="btn-clear" type="button" disabled>Clear all</button></div>
       </div>
@@ -252,6 +253,6 @@
 
   <div id="blank" aria-hidden="true"></div>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./src/js/app.js?v=20260724-albums1"></script>
+  <script type="module" src="./src/js/app.js?v=20260724-audio2"></script>
 </body>
 </html>

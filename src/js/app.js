@@ -10,6 +10,11 @@ import {
 } from "./auth/spotify-auth.js?v=20260723-library1";
 import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-library1";
 import { DEFAULT_TOKEN_STORAGE_KEY } from "./auth/token-store.js";
+import {
+  AUDIO_EQ_BANDS,
+  AUDIO_EQ_PRESETS,
+  createAudioEffectsController,
+} from "./audio/audio-effects.js";
 import { SpotifyApiClient, SpotifyApiError } from "./spotify/api-client.js";
 import { SpotifyPlaybackSdk } from "./spotify/playback-sdk.js";
 import { PlaybackController } from "./spotify/playback-controller.js";
@@ -73,7 +78,6 @@ import {
   setupModals,
 } from "./ui/modals.js";
 import {
-  explainInactiveFeature,
   setupInactiveFeatures,
 } from "./ui/inactive-features.js";
 import { setupToast, showToast } from "./ui/toast.js";
@@ -117,6 +121,13 @@ let dockVisible = true;
 let lyricsVisible = false;
 let mediaSessionEnabled = true;
 let headphoneSkipEnabled = false;
+let ambientAudioReaction = false;
+let soundSettings = {
+  speed: 1,
+  reverb: 0,
+  eq: AUDIO_EQ_PRESETS.Flat.slice(),
+  eqPreset: "Flat",
+};
 let oauthPopup;
 let oauthCallbackInFlightState;
 let pendingOAuthCallback;
@@ -126,6 +137,13 @@ let albumAbortController;
 let lyricsAbortController;
 let currentLyricsTrackKey;
 const oauthChannel = createOAuthChannel();
+const audioEffects = createAudioEffectsController({
+  onCaptureChange: () => renderSoundSettings(),
+});
+let ambientFrame = 0;
+let ambientSmoothBass = 0;
+let ambientLastPaint = 0;
+let preferenceSaveTimer;
 
 window.addEventListener("pageshow", (event) => {
   if (
@@ -237,6 +255,7 @@ async function initialize() {
 }
 
 function setupUi() {
+  audioEffects.install();
   setupToast();
   setupModals();
   setupInactiveFeatures();
@@ -258,6 +277,9 @@ function setupUi() {
   lyricsVisible = Boolean(preferences.lyricsVisible);
   mediaSessionEnabled = preferences.mediaSessionEnabled !== false;
   headphoneSkipEnabled = Boolean(preferences.headphoneSkipEnabled);
+  soundSettings = normalizeSoundPreferences(preferences.sound);
+  ambientAudioReaction = Boolean(preferences.ambientAudioReaction);
+  applySoundSettings();
   setQueueVisible(queueVisible);
   setDockVisible(dockVisible);
   setLyricsVisible(lyricsVisible);
@@ -303,11 +325,14 @@ function setupUi() {
     onNext: () => runMediaCommand(() => controller?.next()),
   });
   bindVolume();
+  bindSoundSettings();
   bindMediaSettings();
   bindSeekSurface(getElements().seek);
   bindSeekSurface(getElements().immersiveSeek);
   bindDock();
   bindKeyboard();
+  renderSoundSettings();
+  updateAmbientLoop();
 
   window.addEventListener("online", () => {
     showToast("Network restored. Rechecking Spotify…");
@@ -481,6 +506,7 @@ function renderPlayback(playback) {
   );
 
   document.title = playback?.title ? `${playback.title} — Spool` : "Spool";
+  updateAmbientLoop();
 }
 
 function renderConnection(state, overrides = {}) {
@@ -589,7 +615,9 @@ function renderSettings(status = {}) {
   });
   renderPreferenceToggle(getElements().mediaToggle, mediaSessionEnabled);
   renderPreferenceToggle(getElements().headphoneSkipToggle, headphoneSkipEnabled);
+  renderPreferenceToggle(getElements().ambientToggle, ambientAudioReaction);
   renderVolume();
+  renderSoundSettings();
 }
 
 async function handlePrimaryAction() {
@@ -1220,6 +1248,87 @@ function renderVolume() {
   volumeValue.textContent = `${Math.round(volume * 100)}%`;
 }
 
+function bindSoundSettings() {
+  const elements = getElements();
+  elements.speedRange?.addEventListener("input", () => {
+    setPlaybackSpeed(Number(elements.speedRange.value));
+  });
+  elements.reverbRange?.addEventListener("input", () => {
+    setReverbAmount(Number(elements.reverbRange.value));
+  });
+  elements.eqSliders.forEach((slider, index) => {
+    slider.addEventListener("input", () => {
+      soundSettings.eq[index] = Math.min(12, Math.max(-12, Number(slider.value) || 0));
+      soundSettings.eqPreset = presetNameForEq(soundSettings.eq) || "Custom";
+      applySoundSettings();
+      renderSoundSettings();
+      scheduleUiPreferencesSave();
+    });
+  });
+  elements.eqPresets?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-preset]");
+    if (!button) return;
+    const preset = button.dataset.preset;
+    if (!AUDIO_EQ_PRESETS[preset]) return;
+    soundSettings.eq = AUDIO_EQ_PRESETS[preset].slice();
+    soundSettings.eqPreset = preset;
+    applySoundSettings();
+    renderSoundSettings();
+    scheduleUiPreferencesSave();
+  });
+}
+
+function setPlaybackSpeed(speed) {
+  soundSettings.speed = Math.min(2.5, Math.max(0.25, Number(speed) || 1));
+  applySoundSettings();
+  renderSoundSettings();
+  scheduleUiPreferencesSave();
+}
+
+function setReverbAmount(reverb) {
+  soundSettings.reverb = Math.min(1, Math.max(0, Number(reverb) || 0));
+  applySoundSettings();
+  renderSoundSettings();
+  scheduleUiPreferencesSave();
+}
+
+function applySoundSettings() {
+  audioEffects.setSettings({
+    speed: soundSettings.speed,
+    reverb: soundSettings.reverb,
+    eqEnabled: true,
+    eq: soundSettings.eq,
+  });
+}
+
+function renderSoundSettings() {
+  const elements = getElements();
+  const speed = Math.min(2.5, Math.max(0.25, Number(soundSettings.speed) || 1));
+  const reverb = Math.min(1, Math.max(0, Number(soundSettings.reverb) || 0));
+
+  if (elements.speedRange) elements.speedRange.value = String(speed);
+  if (elements.speedValue) elements.speedValue.textContent = `${speed.toFixed(2)}x`;
+  if (elements.reverbRange) elements.reverbRange.value = String(reverb);
+  if (elements.reverbValue) elements.reverbValue.textContent = `${Math.round(reverb * 100)}%`;
+  if (elements.soundCaptureStatus) {
+    elements.soundCaptureStatus.textContent = audioEffects.hasCapture()
+      ? "Audio output captured"
+      : "Audio output not captured yet";
+  }
+  if (elements.eqValue) {
+    elements.eqValue.textContent = soundSettings.eqPreset === "Flat"
+      ? "Flat"
+      : soundSettings.eqPreset || "Custom";
+  }
+
+  elements.eqSliders.forEach((slider, index) => {
+    slider.value = String(soundSettings.eq[index] ?? 0);
+  });
+  elements.eqPresets?.querySelectorAll("[data-preset]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.preset === soundSettings.eqPreset);
+  });
+}
+
 function bindMediaSettings() {
   getElements().mediaToggle?.addEventListener("click", () => {
     mediaSessionEnabled = !mediaSessionEnabled;
@@ -1227,6 +1336,10 @@ function bindMediaSettings() {
   });
   getElements().headphoneSkipToggle?.addEventListener("click", () => {
     headphoneSkipEnabled = !headphoneSkipEnabled;
+    updateMediaPreferences();
+  });
+  getElements().ambientToggle?.addEventListener("click", () => {
+    ambientAudioReaction = !ambientAudioReaction;
     updateMediaPreferences();
   });
 }
@@ -1238,6 +1351,7 @@ function updateMediaPreferences() {
   });
   renderMediaSession(currentPlayback);
   renderSettings();
+  updateAmbientLoop();
   saveUiPreferences();
 }
 
@@ -1376,7 +1490,9 @@ function bindKeyboard() {
     } else if (event.code === "ArrowUp" || event.code === "ArrowDown") {
       event.preventDefault();
       if (event.shiftKey) {
-        explainInactiveFeature("Playback speed");
+        const delta = event.code === "ArrowUp" ? 0.05 : -0.05;
+        setPlaybackSpeed(soundSettings.speed + delta);
+        showToast(`Speed ${soundSettings.speed.toFixed(2)}x`);
       } else {
         const delta = event.code === "ArrowUp" ? 0.05 : -0.05;
         await runKeyboardCommand(() => controller?.setVolume(
@@ -1446,6 +1562,66 @@ function showSetupHelp() {
   showToast("Copy config.example.js to config.local.js, then add only your Spotify Client ID.", { duration: 5200 });
 }
 
+function updateAmbientLoop() {
+  const shouldRun = Boolean(
+    ambientAudioReaction &&
+    currentPlayback?.activeDevice &&
+    currentPlayback?.isPlaying,
+  );
+  if (!shouldRun) {
+    if (ambientFrame) cancelAnimationFrame(ambientFrame);
+    ambientFrame = 0;
+    ambientSmoothBass = 0;
+    ambientLastPaint = 0;
+    resetAmbientReaction();
+    return;
+  }
+  if (!ambientFrame) ambientFrame = requestAnimationFrame(paintAmbientReaction);
+}
+
+function paintAmbientReaction(time) {
+  ambientFrame = requestAnimationFrame(paintAmbientReaction);
+  if (time - ambientLastPaint < 33) return;
+  ambientLastPaint = time;
+
+  const frequencyData = audioEffects.getFrequencyData();
+  const bass = frequencyData ? bassLevel(frequencyData) : 0;
+  ambientSmoothBass += (bass - ambientSmoothBass) * 0.18;
+  renderAmbientReaction(ambientSmoothBass);
+}
+
+function renderAmbientReaction(level) {
+  const elements = getElements();
+  const bass = Math.max(0, Math.min(1, level));
+  if (elements.backgroundArt) {
+    elements.backgroundArt.style.transform = `scale(${(1.2 + bass * 0.09).toFixed(3)})`;
+    elements.backgroundArt.style.filter = `blur(90px) saturate(1.9) brightness(${(0.58 + bass * 0.36).toFixed(3)})`;
+  }
+  if (elements.immersiveBackground) {
+    elements.immersiveBackground.style.transform = `scale(${(1.25 + bass * 0.1).toFixed(3)})`;
+    elements.immersiveBackground.style.filter = `blur(80px) saturate(1.9) brightness(${(0.5 + bass * 0.34).toFixed(3)})`;
+  }
+}
+
+function resetAmbientReaction() {
+  const elements = getElements();
+  if (elements.backgroundArt) {
+    elements.backgroundArt.style.transform = "";
+    elements.backgroundArt.style.filter = "";
+  }
+  if (elements.immersiveBackground) {
+    elements.immersiveBackground.style.transform = "";
+    elements.immersiveBackground.style.filter = "";
+  }
+}
+
+function bassLevel(frequencyData) {
+  let total = 0;
+  const end = Math.min(12, frequencyData.length);
+  for (let index = 1; index < end; index += 1) total += frequencyData[index];
+  return end > 1 ? total / ((end - 1) * 255) : 0;
+}
+
 function readUiPreferences() {
   try {
     const parsed = JSON.parse(localStorage.getItem(UI_PREFERENCES_KEY) || "{}");
@@ -1463,8 +1639,44 @@ function saveUiPreferences() {
       lyricsVisible,
       mediaSessionEnabled,
       headphoneSkipEnabled,
+      ambientAudioReaction,
+      sound: {
+        speed: soundSettings.speed,
+        reverb: soundSettings.reverb,
+        eq: soundSettings.eq,
+        eqPreset: soundSettings.eqPreset,
+      },
     }));
   } catch {}
+}
+
+function scheduleUiPreferencesSave() {
+  clearTimeout(preferenceSaveTimer);
+  preferenceSaveTimer = setTimeout(saveUiPreferences, 120);
+}
+
+function normalizeSoundPreferences(raw = {}) {
+  const eq = AUDIO_EQ_BANDS.map((_, index) => {
+    const value = Number(raw?.eq?.[index]);
+    return Number.isFinite(value) ? Math.min(12, Math.max(-12, value)) : 0;
+  });
+  const eqPreset = AUDIO_EQ_PRESETS[raw?.eqPreset] && eqMatches(eq, AUDIO_EQ_PRESETS[raw.eqPreset])
+    ? raw.eqPreset
+    : presetNameForEq(eq) || "Custom";
+  return {
+    speed: Number.isFinite(Number(raw?.speed)) ? Math.min(2.5, Math.max(0.25, Number(raw.speed))) : 1,
+    reverb: Number.isFinite(Number(raw?.reverb)) ? Math.min(1, Math.max(0, Number(raw.reverb))) : 0,
+    eq,
+    eqPreset,
+  };
+}
+
+function presetNameForEq(eq) {
+  return Object.entries(AUDIO_EQ_PRESETS).find(([, values]) => eqMatches(eq, values))?.[0] || "";
+}
+
+function eqMatches(left, right) {
+  return AUDIO_EQ_BANDS.every((_, index) => Math.abs((left[index] || 0) - (right[index] || 0)) < 0.01);
 }
 
 function removeLegacyOAuthQuery() {
