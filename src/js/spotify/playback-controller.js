@@ -141,7 +141,7 @@ export class PlaybackController extends Emitter {
     }
   }
 
-  async playNow(uri) {
+  async playNow(uri, { contextUri = null, contextPosition = null, uris = null } = {}) {
     if (!this.deviceId) {
       throw new Error("Wait for the Spool playback device to become ready.");
     }
@@ -159,11 +159,22 @@ export class PlaybackController extends Emitter {
 
         // Start Playback can target Spool directly. Avoid a preceding Transfer
         // Playback command because Spotify does not guarantee Player command order.
-        await this.#api.startPlayback({
-          deviceId: this.deviceId,
-          uris: [uri],
-          positionMs: 0,
-        });
+        const contextOffset = Number.isInteger(contextPosition) && contextPosition >= 0
+          ? { position: contextPosition }
+          : uri ? { uri } : null;
+        const playbackRequest = contextUri
+          ? {
+              deviceId: this.deviceId,
+              contextUri,
+              ...(contextOffset ? { offset: contextOffset } : {}),
+              positionMs: 0,
+            }
+          : {
+              deviceId: this.deviceId,
+              uris: Array.isArray(uris) && uris.length ? uris : [uri],
+              positionMs: 0,
+            };
+        await this.#api.startPlayback(playbackRequest);
         if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
 
         const [state] = await Promise.all([
@@ -178,6 +189,53 @@ export class PlaybackController extends Emitter {
         if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
         this.#setConnection("player-ready", { message: error.message });
         this.#emitCommandError("Spotify could not start that song.", error);
+        throw error;
+      }
+    });
+    this.#playCommandTail = operation;
+    return operation;
+  }
+
+  async playQueueItem({ uri, index = 0 } = {}) {
+    if (!this.deviceId || !this.playbackState?.activeDevice) {
+      throw new Error("Use Spool as the active Spotify device first.");
+    }
+    const queueIndex = Number(index);
+    if (!Number.isInteger(queueIndex) || queueIndex < 0) {
+      throw new RangeError("The selected Spotify queue position is invalid.");
+    }
+
+    // Spotify exposes no queue-entry IDs and no jump-to-queue-item endpoint.
+    // Advancing through the confirmed queue is the only documented operation
+    // that preserves user-added entries and the current playback context.
+    const activation = Promise.resolve(this.#sdk.activateElement());
+    const commandGeneration = ++this.#playCommandGeneration;
+    const operation = this.#playCommandTail.catch(() => {}).then(async () => {
+      if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
+      await activation;
+      this.#setConnection("transferring-playback");
+      try {
+        for (let step = 0; step <= queueIndex; step += 1) {
+          if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
+          if (this.#sdk.ready) await this.#sdk.next();
+          else await this.#api.skipNext({ deviceId: this.deviceId });
+        }
+        const [state] = await Promise.all([
+          this.refreshState({ fresh: true }),
+          this.refreshQueue().catch(() => this.queue),
+        ]);
+        if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
+        this.#setConnection(state?.activeDevice ? "active" : "player-ready");
+        if (uri && state?.itemUri && state.itemUri !== uri) {
+          this.emit("notice", {
+            message: "Spotify changed the queue while Spool was moving to that song.",
+          });
+        }
+        return true;
+      } catch (error) {
+        if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
+        this.#setConnection("active", { message: error.message });
+        this.#emitCommandError("Spotify could not move to that queued song.", error);
         throw error;
       }
     });

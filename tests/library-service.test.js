@@ -7,6 +7,10 @@ import {
   normalizeLibraryEntry,
   normalizeLibraryPlaylist,
 } from "../src/js/spotify/library-service.js";
+import {
+  formatCollectionDuration,
+  formatTrackDuration,
+} from "../src/js/ui/library.js";
 
 const TRACK = {
   id: "track-1",
@@ -97,4 +101,44 @@ test("library source pages normalize current item fields and pagination", async 
   assert.equal(page.items[0].title, "Signal Path");
   assert.equal(page.items[0].playable, true);
   assert.equal(page.nextOffset, 1);
+});
+
+test("full library loads follow every page and calculate exact collection duration", async () => {
+  const offsets = [];
+  const service = new SpotifyLibraryService({
+    apiClient: {
+      async getPlaylistItems(_id, { offset }) {
+        offsets.push(offset);
+        return offset === 0
+          ? {
+              items: [{ item: TRACK }],
+              total: 2,
+              next: "https://api.spotify.com/v1/playlists/p/items?offset=1&limit=1",
+            }
+          : {
+              items: [{ item: { ...TRACK, id: "track-2", uri: "spotify:track:track-2", duration_ms: 90_500 } }],
+              total: 2,
+              next: null,
+            };
+      },
+    },
+  });
+  const source = { id: "p", kind: "playlist", canBrowse: true, total: 2 };
+  const progress = [];
+  const result = await service.loadSource(source, {
+    onProgress: (page) => progress.push(page.items.length),
+  });
+
+  assert.deepEqual(offsets, [0, 1]);
+  assert.deepEqual(progress, [1, 2]);
+  assert.equal(result.items.length, 2);
+  assert.equal(result.durationMs, 270_500);
+  assert.equal(result.complete, true);
+  assert.equal(source.durationMs, 270_500);
+});
+
+test("library duration labels use stable player-style whole seconds", () => {
+  assert.equal(formatTrackDuration(180_999), "3:00");
+  assert.equal(formatCollectionDuration(2_161_999), "36 min 1 sec");
+  assert.equal(formatCollectionDuration(7_380_000), "2 hr 3 min");
 });

@@ -294,6 +294,41 @@ test("controller lists devices, transfers externally, plays a queue song in Spoo
   assert.ok(sdk.calls.some((call) => Array.isArray(call) && call[0] === "set-volume" && call[1] === 0.35));
 });
 
+test("playlist playback keeps its context and queue clicks advance without replacing the queue", async () => {
+  const sdk = new FakeSdk();
+  const api = createApi();
+  const controller = new PlaybackController({
+    apiClient: api,
+    sdk,
+    queueService: createQueueService(),
+    setIntervalImpl: () => 1,
+    clearIntervalImpl: () => {},
+  });
+  sdk.becomeReady();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  await controller.playNow("spotify:track:track-2", {
+    contextUri: "spotify:playlist:playlist-1",
+    contextPosition: 7,
+  });
+  const contextualStart = api.calls.find((call) => Array.isArray(call) && call[0] === "start");
+  assert.deepEqual(contextualStart[1], {
+    deviceId: "spool-device",
+    contextUri: "spotify:playlist:playlist-1",
+    offset: { position: 7 },
+    positionMs: 0,
+  });
+  assert.equal(contextualStart[1].uris, undefined);
+
+  const startsBeforeQueueClick = api.calls.filter((call) => Array.isArray(call) && call[0] === "start").length;
+  await controller.playQueueItem({ uri: "spotify:track:track-4", index: 2 });
+  assert.equal(sdk.calls.filter((call) => call === "next").length, 3);
+  assert.equal(
+    api.calls.filter((call) => Array.isArray(call) && call[0] === "start").length,
+    startsBeforeQueueClick,
+  );
+});
+
 test("disconnect during connect cannot restart the progress loop", async () => {
   let releaseConnect;
   const sdk = new FakeSdk();

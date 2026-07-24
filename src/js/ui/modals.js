@@ -1,6 +1,7 @@
 import { getElements } from './elements.js';
 
 const DEFAULT_TRIGGERS = Object.freeze({
+  'dock-search': 'modal-search',
   'dock-library': 'modal-library',
   'dock-import': 'modal-import',
   'dock-eq': 'modal-eq',

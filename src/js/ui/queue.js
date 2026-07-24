@@ -19,7 +19,10 @@ export function setupQueue({ onPlay } = {}) {
   const handleClick = (event) => {
     const row = event.target.closest('[data-play-uri]');
     if (!row || row.disabled) return;
-    onPlay?.(row.dataset.playUri);
+    onPlay?.({
+      uri: row.dataset.playUri,
+      index: Number(row.dataset.queueIndex),
+    });
   };
   queueList.addEventListener('click', handleClick);
   queueCleanup = () => {
@@ -51,7 +54,10 @@ export function renderQueue(queueState = {}) {
 
   if (items.length) {
     fragment.append(sectionLabel('Up next'));
-    items.forEach((item) => fragment.append(createQueueRow(item, { removable: true })));
+    items.forEach((item, index) => fragment.append(createQueueRow(item, {
+      removable: true,
+      queueIndex: index,
+    })));
   }
 
   queueList.replaceChildren();
@@ -100,7 +106,10 @@ export function createQueueRow(item, options = {}) {
     row.disabled = Boolean(unavailableReason);
     row.title = unavailableReason || `Play ${title} now`;
     row.setAttribute('aria-label', unavailableReason || `Play ${title} now`);
-    if (!unavailableReason) row.dataset.playUri = item.uri;
+    if (!unavailableReason) {
+      row.dataset.playUri = item.uri;
+      row.dataset.queueIndex = String(options.queueIndex ?? 0);
+    }
   }
   row.dataset.itemType = type;
   if (item.uri) row.dataset.uri = item.uri;

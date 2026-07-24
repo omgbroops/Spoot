@@ -380,6 +380,49 @@ export class SpotifyApiClient {
     });
   }
 
+  search(
+    query,
+    {
+      types = ["track", "album", "artist", "playlist"],
+      limit = 10,
+      offset = 0,
+      market,
+      signal,
+    } = {},
+  ) {
+    const normalizedQuery = String(query || "").trim();
+    const allowedTypes = new Set([
+      "album",
+      "artist",
+      "playlist",
+      "track",
+      "show",
+      "episode",
+      "audiobook",
+    ]);
+    if (!normalizedQuery) throw new TypeError("A Spotify search query is required.");
+    if (!Array.isArray(types) || !types.length || types.some((type) => !allowedTypes.has(type))) {
+      throw new TypeError("Spotify search types are invalid.");
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 10) {
+      throw new RangeError("Spotify search limit must be between 1 and 10.");
+    }
+    if (!Number.isInteger(offset) || offset < 0 || offset > 1000) {
+      throw new RangeError("Spotify search offset must be between 0 and 1000.");
+    }
+
+    return this.request("search", {
+      query: {
+        q: normalizedQuery,
+        type: types,
+        limit,
+        offset,
+        market,
+      },
+      signal,
+    });
+  }
+
   transferPlayback(deviceId, { play = false, signal } = {}) {
     if (typeof deviceId !== "string" || !deviceId) {
       throw new TypeError("A Spotify device ID is required for transfer.");
@@ -414,6 +457,9 @@ export class SpotifyApiClient {
     signal,
   } = {}) {
     const payload = {};
+    if (contextUri && uris) {
+      throw new TypeError("Playback accepts either a context or a URI list, not both.");
+    }
     if (contextUri) {
       payload.context_uri = assertSpotifyUri(contextUri, [
         "album",
@@ -427,7 +473,24 @@ export class SpotifyApiClient {
       }
       payload.uris = uris.map((uri) => assertSpotifyUri(uri, ["track"]));
     }
-    if (offset !== undefined) payload.offset = offset;
+    if (offset !== undefined) {
+      if (!contextUri || !offset || typeof offset !== "object" || Array.isArray(offset)) {
+        throw new TypeError("A playback offset requires an album or playlist context.");
+      }
+      if (!/^spotify:(?:album|playlist):/u.test(contextUri)) {
+        throw new TypeError("Playback offsets are only supported for album and playlist contexts.");
+      }
+      if (Object.hasOwn(offset, "uri")) {
+        payload.offset = { uri: assertSpotifyUri(offset.uri, ["track"]) };
+      } else if (Object.hasOwn(offset, "position")) {
+        if (!Number.isInteger(offset.position) || offset.position < 0) {
+          throw new RangeError("Playback offset position must be a non-negative integer.");
+        }
+        payload.offset = { position: offset.position };
+      } else {
+        throw new TypeError("Playback offset must contain a track URI or position.");
+      }
+    }
     if (positionMs !== undefined) {
       if (!Number.isFinite(positionMs) || positionMs < 0) {
         throw new RangeError("Playback position must be non-negative.");

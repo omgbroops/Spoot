@@ -96,6 +96,18 @@ export class MockPlaybackController extends Emitter {
     return true;
   }
 
+  async playQueueItem({ index = 0 } = {}) {
+    if (!this.playbackState?.activeDevice) {
+      throw new Error("Use Spool as the active Spotify device first.");
+    }
+    const queueIndex = Number(index);
+    if (!Number.isInteger(queueIndex) || queueIndex < 0) {
+      throw new RangeError("The selected mock queue position is invalid.");
+    }
+    for (let step = 0; step <= queueIndex; step += 1) await this.next();
+    return true;
+  }
+
   async togglePlay() {
     if (!this.playbackState) return;
     this.playbackState = {

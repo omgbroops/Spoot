@@ -179,24 +179,35 @@ authoritative state refresh.
 Press repeat three times and verify the order `off` -> `context` -> `track` ->
 `off`. The title/label and visual state should match Spotify after each command.
 
-### 15. Test queue and Library behavior
+### 15. Test queue, Library, and search behavior
 
 Open **Up Next** (or press Q). Confirm it renders a **Now Playing** row and the
 upcoming Spotify items with artwork, title, artist/show names, and sensible
-track/episode handling. Click an ordinary upcoming song and confirm Spool takes
-over playback and starts that song. This starts a new playback context; it is
-not a claim that Spotify jumped to that exact queue occurrence. Episode, local,
-null, restricted, and unplayable rows must remain grey and inert. Skip a track
-and verify the queue refreshes. An empty Spotify queue should show an honest
-empty state. **Clear**, remove, and drag to reorder must remain inactive.
+track/episode handling. Click the first and then a later ordinary upcoming song.
+Spool should reach the selected occurrence by advancing through Spotify's real
+queue, without issuing a one-song Start Playback request or duplicating that
+song. Episode, local, null, restricted, and unplayable rows must remain grey and
+inert. If another Spotify client changes the queue while Spool is advancing, a
+readable reconciliation notice is acceptable. Skip a track and verify the queue
+refreshes. An empty Spotify queue should show an honest empty state. **Clear**,
+remove, and drag to reorder must remain inactive.
 
 Open **Library**. Confirm Liked Songs and every playlist returned by Spotify are
-listed. Owned/collaborative playlists should drill into paginated items and
-ordinary song clicks should play through Spool. A followed Spotify/editorial or
-generated playlist should remain visible but grey as **Metadata only**. A
-playlist-item `403` must downgrade to that state instead of looking empty. The
-Library note must explain that Spotify does not expose playlist folders or DJ;
-Spool must not invent either.
+listed. The back arrow belongs beside the **Library** title. An
+owned/collaborative playlist should load all item pages, show song count and
+total duration, and list each song's album and duration without a date-added
+column. Click a song in the middle: Spotify's queue should contain the rest of
+that playlist after the selected position instead of repeated copies of one
+song. A followed Spotify/editorial or generated playlist should remain visible
+but grey as **Metadata only**. A playlist-item `403` must downgrade to that state
+instead of looking empty. The Library note must explain that Spotify does not
+expose playlist folders or DJ; Spool must not invent either.
+
+Open **Search** from the dock or press `/`. Confirm the debounced results are
+grouped into Songs, Artists, Albums, and Playlists. Song results should start in
+their album context; artist, album, and playlist results should start the whole
+returned context. Unavailable results must stay inert, and the external Spotify
+link must not accidentally trigger playback.
 
 ### 16. Test devices, volume, system media, and immersive mode
 
@@ -213,11 +224,18 @@ volume under hardware control. Toggle **Show song in media player** and verify
 OS/browser metadata appears and clears. Toggle **Headphone click → skip** and
 verify next/previous media keys become active only while Spool owns playback.
 
-Open immersive mode with its button or F. Confirm its artwork, title, artists,
-progress, play/pause, previous/next, seek, shuffle, and repeat remain synchronized
-with the main player. Test a narrow viewport. The lyrics area may remain visible
-but must say that lyrics are not connected. Collapse with the on-screen control
-and with Escape.
+Press L to open the floating lyrics widget while a normal song is playing.
+Synced lyrics should highlight and follow the current line; wheel/touch scrolling
+should pause auto-follow for about five seconds, and clicking a timed line should
+seek Spotify. Plain lyrics should render without fake timing. Instrumental and
+not-found responses should be stated honestly. Provider failures must fall
+through without breaking playback or logging a Bearer token.
+
+Open immersive mode with its button or F, then use its lyrics button. Confirm
+its artwork, title, artists, progress, lyrics, play/pause, previous/next, seek,
+shuffle, and repeat remain synchronized with the main player. Test a narrow
+viewport and click a lyric line there. Collapse with the on-screen control and
+with Escape.
 
 ### 17. Reload and verify restoration/refresh
 

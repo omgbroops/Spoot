@@ -32,22 +32,23 @@ detectable.
 Spool carries forward the visual shell and the interactions that have a clear
 Spotify-safe mapping: Now Playing, the Spotify queue renderer, draggable widget
 placement, main and immersive transport controls, responsive immersive mode,
-keyboard shortcuts, modal treatment, and connection/status surfaces.
+keyboard shortcuts, modal treatment, connection/status surfaces, Spotify
+Library/search browsing, and fetched lyrics with synchronized highlighting.
 
 The following preserved surfaces are deliberately dormant in this pass:
 
 - local file and Dropbox import;
-- library browsing, search, discovery, recommendations, and Spotify DJ;
-- playlist creation or editing and Liked Songs;
-- lyrics fetching, editing, or synchronization;
+- recommendations and Spotify DJ;
+- playlist creation or editing;
+- lyrics editing or manual synchronization;
 - Sound controls: volume, speed, EQ, reverb, crossfade, and gapless playback;
 - sleep timer and listening statistics;
 - queue clear, arbitrary remove, reorder, and other full queue editing.
 
 Dormant UI must remain disabled or produce a small explanatory message. It must
 not display success, mutate a local imitation of Spotify state, or reach any
-audio engine. Lyrics may retain their visual area with “Lyrics are not connected
-yet.”
+audio engine. Live lyrics may update only their existing display surfaces and
+seek through the selected Spotify controller.
 
 ## Why the local engine never executes
 

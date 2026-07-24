@@ -254,13 +254,67 @@ body:not(.is-playing) .row-eq span {
   padding: 6px 20px 18px;
 }
 
+#lyrics-list {
+  transition: mask-image 0.25s, -webkit-mask-image 0.25s;
+}
+
+#lyrics-list.scrolled {
+  mask-image: linear-gradient(180deg, transparent 0, #000 52px);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 52px);
+}
+
 .lyr-line {
+  display: block;
+  width: 100%;
   padding: 5px 0;
   color: var(--text-faint);
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.34;
+  text-align: left;
+  transition: color 0.25s, opacity 0.25s, transform 0.25s;
+}
+
+.lyr-line.synced {
+  cursor: pointer;
+}
+
+.lyr-line:hover,
+.lyr-line:focus-visible,
+.lyr-line.active {
+  color: var(--text);
+}
+
+.lyr-line:focus-visible {
+  outline: none;
+  transform: translateX(3px);
+}
+
+.lyr-line.interlude {
+  letter-spacing: 0.18em;
+}
+
+.lyr-line.background {
+  padding-left: 12px;
+  font-size: 14px;
+  font-style: italic;
+}
+
+.lyr-plain {
+  padding: 6px 0;
+  color: var(--text-dim);
+  font-size: 14.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.lyr-empty {
+  padding: 30px 20px;
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
 }
 
 .dock {

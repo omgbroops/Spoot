@@ -249,3 +249,54 @@ test("library and device methods use current Spotify endpoints and pagination pa
   assert.equal(requests[5].options.method, "PUT");
   assert.equal(requests[5].url.searchParams.get("volume_percent"), "35");
 });
+
+test("search and contextual playback use Spotify's documented request shapes", async () => {
+  const requests = [];
+  const client = new SpotifyApiClient({
+    tokenProvider: async () => "access",
+    fetchImpl: async (url, options) => {
+      const parsed = new URL(url);
+      requests.push({ url: parsed, options });
+      return parsed.pathname.endsWith("/search")
+        ? jsonResponse({ tracks: { items: [] } })
+        : new Response(null, { status: 204 });
+    },
+  });
+
+  await client.search("signal path", {
+    types: ["track", "artist", "album", "playlist"],
+    limit: 10,
+    market: "US",
+  });
+  await client.startPlayback({
+    deviceId: "spool-device",
+    contextUri: "spotify:playlist:playlist-1",
+    offset: { position: 4 },
+    positionMs: 0,
+  });
+
+  assert.equal(requests[0].url.pathname, "/v1/search");
+  assert.equal(requests[0].url.searchParams.get("q"), "signal path");
+  assert.equal(requests[0].url.searchParams.get("type"), "track,artist,album,playlist");
+  assert.equal(requests[0].url.searchParams.get("limit"), "10");
+  assert.equal(requests[0].url.searchParams.get("market"), "US");
+  assert.deepEqual(JSON.parse(requests[1].options.body), {
+    context_uri: "spotify:playlist:playlist-1",
+    offset: { position: 4 },
+    position_ms: 0,
+  });
+  assert.throws(
+    () => client.startPlayback({
+      contextUri: "spotify:artist:artist-1",
+      offset: { position: 0 },
+    }),
+    /only supported for album and playlist/u,
+  );
+  assert.throws(
+    () => client.startPlayback({
+      contextUri: "spotify:album:album-1",
+      uris: ["spotify:track:track-1"],
+    }),
+    /either a context or a URI list/u,
+  );
+});

@@ -63,7 +63,8 @@ The live controller composes two Spotify adapters:
   `Retry-After`, readable `403`/restriction errors, and `AbortSignal` where the
   caller can cancel work. Playback-state requests are deduplicated rather than
   polled aggressively. It also owns device discovery/transfer and the current
-  profile, saved-track, playlist, and `/playlists/{id}/items` requests.
+  profile, saved-track, playlist, `/playlists/{id}/items`, and catalog-search
+  requests.
 - `spotify/playback-sdk.js` loads the official SDK script once and creates one
   `Spotify.Player`. It translates `ready`, `not_ready`,
   `player_state_changed`, initialization, authentication, account, playback,
@@ -75,9 +76,26 @@ The live controller composes two Spotify adapters:
 `spotify/library-service.js` owns Spotify-specific library pagination and
 capability classification. It synthesizes Liked Songs from `/me/tracks`,
 flattens `/me/playlists`, and permits drilldown only for owned or collaborative
-playlists. A playlist-item `403` becomes a stable metadata-only state. Null,
-local, restricted, unplayable, and non-track rows remain visible but cannot
-dispatch browser playback.
+playlists. It walks every readable item page sequentially so song count and
+duration describe the complete collection. A playlist-item `403` becomes a
+stable metadata-only state. Null, local, restricted, unplayable, and non-track
+rows remain visible but cannot dispatch browser playback.
+
+`spotify/search-service.js` normalizes Spotify's track, artist, album, and
+playlist groups into one small renderer contract. Track results retain their
+album context; other playable results carry their own context URI.
+
+`lyrics/lyrics-service.js` is a separate, read-only metadata boundary adapted
+from BetterLyrics' provider strategy. It tries synchronized SpicyLyrics data,
+Spotify color-lyrics data, and LRCLIB before falling back to static lyrics. Its
+only authority is the existing short-lived Spotify access token; the Spotify
+color-lyrics request and SpicyLyrics' required `SpicyLyrics-WebAuth` header use
+that access token, while LRCLIB receives no Spotify credential. The refresh
+token never leaves the token provider and diagnostics never include either
+token. Because Spool remains a static browser app, each provider must permit
+the browser request directly. There is intentionally no Spotify
+Desktop/Spicetify companion bridge, loopback lyrics service, or desktop
+credential extraction.
 
 The controller chooses exactly one path for each command. SDK methods are used
 for commands best targeted at the browser player; device-level operations such
@@ -90,7 +108,8 @@ The UI talks only to the application-level controller contract:
 
 ```text
 connect()             disconnect()          transferHere()
-transferToDevice(id)  playNow(trackUri)      refreshDevices()
+transferToDevice(id)  playNow(uri, context)  playQueueItem(entry)
+refreshDevices()
 togglePlay()          previous()            next()
 seek(positionMs)      setShuffle(enabled)   cycleRepeat()
 refreshState()        refreshQueue()        addToQueue(uri)
@@ -108,18 +127,25 @@ Visible progress is interpolated locally from the last authoritative position
 and timestamp. It stops while paused, clamps to duration, and resynchronizes on
 every Spotify state event; animation never becomes a reason to poll Spotify.
 Queue payloads are separately normalized into current and upcoming items with
-track/episode-safe metadata. Clicking an ordinary queue track starts a new
-one-track playback context in Spool; Spotify has no public API for jumping to a
-specific occurrence inside the existing queue, so episodes, local files, and
-restricted rows remain inert.
+track/episode-safe metadata. Spotify exposes neither queue-entry identifiers
+nor a jump-to-occurrence endpoint. Spool therefore reaches a clicked upcoming
+entry with the documented Next operation, once per preceding occurrence, which
+preserves Spotify's queue and playback context. A final state refresh detects a
+queue that changed mid-command. Episodes, local files, and restricted rows
+remain inert. Library playback instead uses Start Playback with the playlist
+`context_uri` and its exact position; Liked Songs uses the loaded URI sequence
+because Spotify exposes no context URI for that collection.
 
 ## UI boundary
 
-UI modules cache elements, render connection status, Now Playing, queue, and
-immersive mode, and translate gestures into controller methods. Main and
-immersive controls share the same normalized state, so neither becomes a second
-source of truth. Widget dragging handles pointer ownership, front ordering,
-screen-edge clamping, responsive defaults, and persisted positions.
+UI modules cache elements, render connection status, Now Playing, queue,
+Library, search, lyrics, and immersive mode, and translate gestures into
+controller methods. Main and immersive controls share the same normalized
+state, so neither becomes a second source of truth. The lyrics renderer also
+shares the controller's interpolated millisecond position, supports timed-line
+seeking, and pauses auto-follow after manual scrolling. Widget dragging handles
+pointer ownership, front ordering, screen-edge clamping, responsive defaults,
+and persisted positions.
 
 The top status is hidden while Spool is active. When another Spotify Connect
 device is active it displays the returned device name (or a neutral fallback)
@@ -144,8 +170,8 @@ Spool uses small, explicit browser-storage namespaces:
 | `spool.ui.widget-positions` | `localStorage` | `ui/widgets.js` | saved `{x, y}` positions for the Now Playing, queue, and lyrics widgets |
 | `spool.ui.preferences` | `localStorage` | `app.js` | queue, dock, lyrics-widget visibility, Media Session visibility, and media-key skip preference |
 
-Spotify playback state, device lists, Library pages, queue data, temporary
-artwork URLs, and audio are not persisted as a local media library. The
+Spotify playback state, device lists, Library pages, search results, queue data,
+temporary lyrics/artwork caches, and audio are not persisted as a local media library. The
 application never opens or reuses the original
 `musicplayer` IndexedDB database.
 
@@ -160,7 +186,8 @@ and clear credentials on logout or unrecoverable authorization failure.
 using `mock/mock-fixtures.js`. `?mock=1&scenario=<name>` selects `default`,
 `paused`, `empty-queue`, `auth-error`, `sdk-error`, `rate-limit`, or `null`.
 Mock state drives the real renderers, transport handlers, progress path, queue,
-device picker, browser volume, Library renderer, widgets, and immersive view.
+device picker, browser volume, Library/search/lyrics renderers, widgets, and
+immersive view.
 Mock mode makes UI and orchestration testable; it
 does not prove Spotify authorization, SDK provisioning, protected audio, or
 real-account restrictions.

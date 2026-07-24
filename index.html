@@ -92,12 +92,15 @@
         <span class="lbl">Lyrics</span>
         <button class="clr inactive-control" id="lyrics-edit" type="button" data-inactive-feature="Lyrics editing" data-nodrag>Edit</button>
       </div>
-      <div class="lyr-list" id="lyrics-list"><div class="lyr-empty">Lyrics are not connected yet.</div></div>
+      <div class="lyr-list" id="lyrics-list"><div class="lyr-empty">Connect Spotify to load lyrics.</div></div>
     </section>
   </main>
 
   <nav class="dock glass" aria-label="Player tools">
-    <button class="dock-btn" id="dock-library" type="button" title="Library" aria-label="Open Library information">
+    <button class="dock-btn" id="dock-search" type="button" title="Search (/)" aria-label="Search Spotify">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+    </button>
+    <button class="dock-btn" id="dock-library" type="button" title="Library" aria-label="Open Spotify Library">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg>
     </button>
     <button class="dock-btn active" id="dock-queue" type="button" title="Up Next (Q)" aria-label="Toggle queue" aria-pressed="true">
@@ -116,9 +119,20 @@
 
   <div class="scrim" id="scrim"></div>
 
+  <section class="modal glass" id="modal-search" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="search-title">
+    <div class="modal-head" data-drag-handle><div class="modal-title" id="search-title">Search</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body search-body">
+      <form class="search-form" id="search-form" role="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+        <input id="search-input" type="search" autocomplete="off" spellcheck="false" placeholder="Artists, songs, albums, playlists" aria-label="Search Spotify">
+      </form>
+      <div class="search-results" id="search-results" aria-live="polite"><div class="empty search-message">Search Spotify for songs, artists, albums, and playlists.</div></div>
+    </div>
+  </section>
+
   <section class="modal glass" id="modal-library" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="lib-title">
     <div class="modal-head" data-drag-handle>
-      <div class="modal-title" id="lib-title">Library</div>
+      <div class="modal-title" id="lib-title"><button class="library-back" id="library-back" type="button" aria-label="Back to Library" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m15 18-6-6 6-6"/></svg></button><span>Library</span></div>
       <div class="head-btns"><button class="head-ic inactive-control" id="lib-new" type="button" title="Playlist editing is not connected in this pass" aria-label="Create playlist (unavailable)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg></button><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     </div>
     <div class="modal-body library-body" id="library-content"><div class="empty">Open Library to load your Spotify collection.</div></div>
@@ -175,6 +189,7 @@
         <div class="kbd"><b>←</b><span>/</span><b>→</b></div><div class="kbd-act">Seek 5s</div>
         <div class="kbd"><b>⇧</b><b>←</b><span>/</span><b>→</b></div><div class="kbd-act">Previous / next track</div>
         <div class="kbd"><b>Q</b></div><div class="kbd-act">Up Next</div>
+        <div class="kbd"><b>/</b></div><div class="kbd-act">Search Spotify</div>
         <div class="kbd"><b>F</b></div><div class="kbd-act">Immersive view</div>
         <div class="kbd"><b>Esc</b></div><div class="kbd-act">Close</div>
       </div>
@@ -198,7 +213,7 @@
 
   <section class="modal glass" id="modal-lyrics" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="lyrics-title">
     <div class="modal-head" data-drag-handle><div class="modal-title" id="lyrics-title">Lyrics</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
-    <div class="modal-body"><div class="lyr-empty">Lyrics are not connected yet.</div></div>
+    <div class="modal-body"><div class="lyr-empty">Lyrics editing is not available.</div></div>
   </section>
 
   <section id="immersive" aria-label="Immersive player" aria-hidden="true">
@@ -223,12 +238,12 @@
           </div>
         </div>
       </div>
-      <div class="im-lyrics lyr-list" id="im-lyrics"><div class="lyr-empty">Lyrics are not connected yet.</div></div>
+      <div class="im-lyrics lyr-list" id="im-lyrics"><div class="lyr-empty">Connect Spotify to load lyrics.</div></div>
     </div>
   </section>
 
   <div id="blank" aria-hidden="true"></div>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./src/js/app.js?v=20260723-library1"></script>
+  <script type="module" src="./src/js/app.js?v=20260724-catalog1"></script>
 </body>
 </html>

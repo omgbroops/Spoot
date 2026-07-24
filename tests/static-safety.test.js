@@ -35,6 +35,7 @@ test("Spotify runtime cannot initialize the dormant local audio engine", () => {
   assert.doesNotMatch(runtime, /indexedDB\.open\s*\(\s*["']musicplayer["']/);
   assert.doesNotMatch(runtime, /\bclient_secret\b/i);
   assert.doesNotMatch(runtime, /\bDROPBOX_APP_KEY\b/);
+  assert.doesNotMatch(runtime, /companion-spicetify-bridge|sp:\/\/oauth|127\.0\.0\.1:49623/iu);
 });
 
 test("OAuth callback recovery uses persistent short-lived transaction storage", () => {

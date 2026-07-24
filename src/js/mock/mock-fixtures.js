@@ -86,10 +86,14 @@ export function createMockPlaybackState(item = MOCK_TRACKS[0], overrides = {}) {
 
 export function createMockQueue(currentIndex = 0) {
   const current = MOCK_TRACKS[currentIndex];
+  const upcoming = Array.from(
+    { length: Math.max(0, MOCK_TRACKS.length - 1) },
+    (_, offset) => MOCK_TRACKS[(currentIndex + offset + 1) % MOCK_TRACKS.length],
+  );
   return {
     nowPlaying: { ...current, nowPlaying: true, index: null },
-    upcoming: MOCK_TRACKS.filter((_, index) => index !== currentIndex),
-    items: MOCK_TRACKS.filter((_, index) => index !== currentIndex),
+    upcoming,
+    items: upcoming,
     isEmpty: false,
     receivedAt: Date.now(),
   };

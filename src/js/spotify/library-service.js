@@ -105,10 +105,12 @@ export class SpotifyLibraryService {
     this.apiClient = apiClient;
     this.profile = null;
     this.sources = null;
+    this.sourceContents = new Map();
   }
 
   async loadSources({ signal, force = false } = {}) {
     if (this.sources && !force) return this.sources;
+    if (force) this.sourceContents.clear();
     const [profile, likedPreview] = await Promise.all([
       this.apiClient.getCurrentUserProfile({ signal }),
       this.apiClient.getSavedTracks({ limit: 1, offset: 0, signal }),
@@ -144,6 +146,53 @@ export class SpotifyLibraryService {
         .map((playlist, index) => normalizeLibraryPlaylist(playlist, profile?.id, index)),
     ];
     return this.sources;
+  }
+
+  async loadSource(source, { signal, force = false, onProgress } = {}) {
+    const cacheKey = source?.id;
+    if (!force && cacheKey && this.sourceContents.has(cacheKey)) {
+      const cached = this.sourceContents.get(cacheKey);
+      onProgress?.(cached);
+      return cached;
+    }
+
+    let offset = 0;
+    let total = source?.total ?? 0;
+    let unavailableReason = null;
+    const items = [];
+
+    do {
+      const page = await this.loadSourcePage(source, { offset, signal });
+      items.push(...page.items);
+      total = page.total;
+      unavailableReason = page.unavailableReason;
+      offset = page.nextOffset;
+      const progress = {
+        source,
+        items: [...items],
+        total,
+        durationMs: collectionDuration(items),
+        nextOffset: offset,
+        complete: offset === null,
+        unavailableReason,
+      };
+      onProgress?.(progress);
+      if (unavailableReason) return progress;
+    } while (offset !== null);
+
+    const result = {
+      source,
+      items,
+      total,
+      durationMs: collectionDuration(items),
+      nextOffset: null,
+      complete: true,
+      unavailableReason: null,
+    };
+    source.total = total;
+    source.durationMs = result.durationMs;
+    if (cacheKey) this.sourceContents.set(cacheKey, result);
+    return result;
   }
 
   async loadSourcePage(source, { offset = 0, signal } = {}) {
@@ -190,4 +239,10 @@ export class SpotifyLibraryService {
       throw error;
     }
   }
+}
+
+function collectionDuration(items) {
+  return items.reduce((sum, entry) => (
+    sum + (Number.isFinite(entry?.durationMs) ? Math.max(0, entry.durationMs) : 0)
+  ), 0);
 }

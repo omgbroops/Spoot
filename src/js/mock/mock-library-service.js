@@ -18,6 +18,7 @@ const SOURCES = [
     name: 'Night drive',
     ownerName: 'Mock listener',
     artworkUrl: './src/assets/mock-cover-orbit.svg',
+    uri: 'spotify:playlist:mockplaylist',
     total: MOCK_TRACKS.length,
     canBrowse: true,
     owned: true,
@@ -57,5 +58,17 @@ export class MockLibraryService {
       nextOffset: null,
       unavailableReason: null,
     };
+  }
+
+
+  async loadSource(source, { onProgress } = {}) {
+    const page = await this.loadSourcePage(source);
+    const result = {
+      ...page,
+      durationMs: page.items.reduce((sum, item) => sum + (item.durationMs || 0), 0),
+      complete: true,
+    };
+    onProgress?.(result);
+    return result;
   }
 }

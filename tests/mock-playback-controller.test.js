@@ -32,6 +32,8 @@ test("mock controller drives the real controller-shaped playback flow", async ()
   assert.equal(controller.playbackState.activeDevice, false);
   await controller.playNow("spotify:track:mock-silver-thread");
   assert.equal(controller.playbackState.activeDevice, true);
+  await controller.playQueueItem({ index: 1 });
+  assert.equal(controller.playbackState.title, "The Night Bus");
   assert.equal(await controller.setVolume(0.4), 0.4);
 
   assert.ok(states.length >= 6);

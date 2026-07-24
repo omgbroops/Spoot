@@ -8,6 +8,7 @@ export function setupLibrary(nextHandlers = {}) {
   cleanup?.();
   handlers = { ...nextHandlers };
   const content = document.getElementById('library-content');
+  const back = document.getElementById('library-back');
   if (!content) return () => {};
   const onClick = (event) => {
     const source = event.target.closest('[data-library-source]');
@@ -16,14 +17,24 @@ export function setupLibrary(nextHandlers = {}) {
       return handlers.onSelectSource?.(lastSourceId);
     }
     const track = event.target.closest('[data-library-play]');
-    if (track && !track.disabled) return handlers.onPlay?.(track.dataset.libraryPlay);
+    if (track && !track.disabled) {
+      return handlers.onPlay?.({
+        uri: track.dataset.libraryPlay,
+        contextUri: track.dataset.libraryContext || null,
+        contextPosition: Number(track.dataset.libraryPosition),
+        sourceKind: track.dataset.librarySourceKind || null,
+      });
+    }
     if (event.target.closest('[data-library-back]')) return handlers.onBack?.();
     if (event.target.closest('[data-library-more]')) return handlers.onLoadMore?.();
     if (event.target.closest('[data-library-refresh]')) return handlers.onRefresh?.();
   };
+  const onBack = () => handlers.onBack?.();
   content.addEventListener('click', onClick);
+  back?.addEventListener('click', onBack);
   cleanup = () => {
     content.removeEventListener('click', onClick);
+    back?.removeEventListener('click', onBack);
     handlers = {};
     cleanup = undefined;
   };
@@ -33,6 +44,7 @@ export function setupLibrary(nextHandlers = {}) {
 export function renderLibrarySources({ status = 'ready', sources = [], message } = {}) {
   const content = document.getElementById('library-content');
   if (!content) return;
+  setBackVisible(false);
   content.replaceChildren();
   if (status === 'loading') return content.append(libraryMessage('Loading your Spotify library…'));
   if (status === 'error') return content.append(errorMessage(message));
@@ -59,13 +71,16 @@ export function renderLibraryDetail({
   items = [],
   total = 0,
   nextOffset = null,
+  durationMs = null,
+  complete = true,
   message,
 } = {}) {
   const content = document.getElementById('library-content');
   if (!content || !source) return;
+  setBackVisible(true);
   content.replaceChildren();
-  content.append(detailHeader(source, total));
-  scheduleFocus(() => content.querySelector('[data-library-back]'));
+  content.append(detailHeader(source, total, durationMs, complete));
+  if (status === 'loading') scheduleFocus(() => document.getElementById('library-back'));
   if (status === 'loading') return content.append(libraryMessage('Loading songs…'));
   if (status === 'error' || message) {
     content.append(libraryMessage(message || 'This playlist could not be loaded.'));
@@ -73,9 +88,10 @@ export function renderLibraryDetail({
     return;
   }
 
+  if (items.length) content.append(trackHeader());
   const list = document.createElement('div');
   list.className = 'library-tracks';
-  for (const entry of items) list.append(trackRow(entry));
+  items.forEach((entry, index) => list.append(trackRow(entry, source, index)));
   content.append(list);
   if (!items.length) content.append(libraryMessage('There are no songs available here.'));
   if (nextOffset !== null) {
@@ -101,7 +117,7 @@ function sourceRow(source) {
   row.append(sourceCover(source, 'library-source-cover'));
   copy.className = 'library-source-copy';
   title.textContent = source.name;
-  const count = Number.isFinite(source.total) ? `${source.total} item${source.total === 1 ? '' : 's'}` : null;
+  const count = Number.isFinite(source.total) ? `${source.total} song${source.total === 1 ? '' : 's'}` : null;
   meta.textContent = [source.kind === 'liked' ? 'Saved songs' : source.ownerName, count]
     .filter(Boolean)
     .join(' · ');
@@ -116,22 +132,22 @@ function sourceRow(source) {
   return row;
 }
 
-function detailHeader(source, total) {
+function detailHeader(source, total, durationMs, complete) {
   const header = document.createElement('div');
-  const back = document.createElement('button');
   const copy = document.createElement('div');
   const title = document.createElement('h2');
   const meta = document.createElement('p');
   header.className = 'library-detail-head';
-  back.className = 'library-back';
-  back.type = 'button';
-  back.dataset.libraryBack = '';
-  back.setAttribute('aria-label', 'Back to Library');
-  back.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m15 18-6-6 6-6"/></svg>';
-  header.append(back, sourceCover(source, 'library-detail-cover'));
+  header.append(sourceCover(source, 'library-detail-cover'));
   copy.className = 'library-detail-copy';
   title.textContent = source.name;
-  meta.textContent = [source.ownerName, Number.isFinite(total) ? `${total} item${total === 1 ? '' : 's'}` : null]
+  meta.textContent = [
+    source.ownerName,
+    Number.isFinite(total) ? `${total} song${total === 1 ? '' : 's'}` : null,
+    Number.isFinite(durationMs) && (complete || durationMs > 0)
+      ? `${formatCollectionDuration(durationMs)}${complete ? '' : ' loaded'}`
+      : null,
+  ]
     .filter(Boolean)
     .join(' · ');
   copy.append(title, meta);
@@ -139,16 +155,23 @@ function detailHeader(source, total) {
   return header;
 }
 
-function trackRow(entry) {
+function trackRow(entry, source, index) {
   const row = document.createElement('button');
   const image = document.createElement('img');
   const copy = document.createElement('span');
   const title = document.createElement('strong');
   const meta = document.createElement('span');
+  const album = document.createElement('span');
+  const duration = document.createElement('span');
   row.type = 'button';
   row.className = `library-track${entry.playable ? '' : ' unavailable'}`;
   row.disabled = !entry.playable;
-  if (entry.playable) row.dataset.libraryPlay = entry.uri;
+  if (entry.playable) {
+    row.dataset.libraryPlay = entry.uri;
+    if (source?.uri && source.kind === 'playlist') row.dataset.libraryContext = source.uri;
+    row.dataset.librarySourceKind = source?.kind || '';
+    row.dataset.libraryPosition = String(index);
+  }
   row.title = entry.unavailableReason || `Play ${entry.title}`;
   image.src = artworkUrl(entry.item || entry) || DEFAULT_COVER;
   image.alt = '';
@@ -156,10 +179,14 @@ function trackRow(entry) {
   copy.className = 'library-track-copy';
   title.textContent = entry.title || 'Unavailable item';
   meta.textContent = entry.item
-    ? artistText(entry.item) || entry.albumName || 'Unknown artist'
+    ? artistText(entry.item) || 'Unknown artist'
     : entry.artist || 'Unavailable';
   copy.append(title, meta);
-  row.append(image, copy);
+  album.className = 'library-track-album';
+  album.textContent = entry.albumName || '—';
+  duration.className = 'library-track-duration';
+  duration.textContent = formatTrackDuration(entry.durationMs);
+  row.append(image, copy, album, duration);
   if (!entry.playable) {
     const reason = document.createElement('span');
     reason.className = 'library-item-state';
@@ -167,6 +194,33 @@ function trackRow(entry) {
     row.append(reason);
   }
   return row;
+}
+
+function trackHeader() {
+  const header = document.createElement('div');
+  header.className = 'library-track-head';
+  header.setAttribute('aria-hidden', 'true');
+  ['', 'Title', 'Album', 'Time', ''].forEach((label) => {
+    const cell = document.createElement('span');
+    cell.textContent = label;
+    header.append(cell);
+  });
+  return header;
+}
+
+export function formatCollectionDuration(durationMs) {
+  const totalSeconds = Math.max(0, Math.floor((Number(durationMs) || 0) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours) return `${hours} hr ${minutes} min`;
+  if (minutes) return `${minutes} min ${seconds} sec`;
+  return `${seconds} sec`;
+}
+
+export function formatTrackDuration(durationMs) {
+  const totalSeconds = Math.max(0, Math.floor((Number(durationMs) || 0) / 1000));
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
 }
 
 function sourceCover(source, className) {
@@ -220,4 +274,9 @@ function openSpotifyLink(url) {
 function scheduleFocus(findTarget) {
   const schedule = globalThis.requestAnimationFrame || ((callback) => setTimeout(callback, 0));
   schedule(() => findTarget()?.focus({ preventScroll: true }));
+}
+
+function setBackVisible(visible) {
+  const back = document.getElementById('library-back');
+  if (back) back.hidden = !visible;
 }
