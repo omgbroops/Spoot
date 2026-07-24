@@ -36,10 +36,14 @@ clear Spotify tokens.
 
 The OAuth verifier/state transaction is short-lived and state is compared
 before a callback code is accepted. Authorization runs in a popup while the
-original loopback-origin tab remains open; this prevents privacy browsers from
-clearing the temporary PKCE verifier when the user leaves for Spotify. Token
-storage events or a same-origin completion message update the original tab.
-Callback authorization parameters are removed with `history.replaceState`.
+original loopback-origin tab remains open. When Spotify returns, the same-origin
+popup passes its callback URL to that original tab with direct `postMessage`
+and a `BroadcastChannel` fallback if the cross-site round trip severed
+`window.opener`. Only the tab that owns the callback state accepts a broadcast.
+Its original `SpotifyAuth` instance validates state and exchanges the code
+using the verifier it created. The popup closes only after a successful result
+for its exact state. Direct callback fallbacks remove authorization parameters
+with `history.replaceState`.
 Access-token refresh begins shortly before expiry and concurrent callers share
 one in-flight refresh promise. A rejected `invalid_grant` clears the unusable
 grant and returns the UI to authorization. Both the API client and
@@ -111,7 +115,7 @@ Spool uses small, explicit browser-storage namespaces:
 | Namespace/key | Storage | Owner | Data |
 | --- | --- | --- | --- |
 | `spool.auth.tokens` | `localStorage` | token store | access/refresh tokens, access and refresh expiry timestamps, authorization time, token type, granted scopes |
-| `spool.auth.pkce` | mirrored `sessionStorage` + `localStorage` | Spotify auth | capped, short-lived verifier/state transactions keyed by OAuth state; the current tab copy is preferred, the persistent copy recovers fresh-tab callbacks, and the matching entry is consumed from both stores |
+| `spool.auth.pkce` | mirrored `sessionStorage` + `localStorage` | Spotify auth | capped, short-lived verifier/state transactions keyed by OAuth state; the opener-owned auth instance handles popup callbacks, the persistent copy supports direct/fresh-tab fallback, and the matching entry is consumed from both stores |
 | `spool.ui.widget-positions` | `localStorage` | `ui/widgets.js` | saved `{x, y}` positions for the Now Playing, queue, and lyrics widgets |
 | `spool.ui.preferences` | `localStorage` | `app.js` | queue, dock, and lyrics-widget visibility |
 

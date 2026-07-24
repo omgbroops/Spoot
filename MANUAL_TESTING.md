@@ -101,8 +101,8 @@ the popup back:
 
 - the popup should close and the original Spool tab should remain at the exact
   loopback URL;
-- `code`, `state`, and other OAuth callback parameters should disappear from
-  the address bar;
+- the original tab should never receive `code`, `state`, or other OAuth
+  callback parameters in its address bar;
 - the UI should report **Spotify connected** and present **Connect player**;
 - no access or refresh token should be printed in the console or URL.
 

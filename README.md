@@ -68,10 +68,12 @@ and [Web Playback SDK requirements](https://developer.spotify.com/documentation/
 
 6. Open [http://127.0.0.1:5173/](http://127.0.0.1:5173/), choose **Log in**,
    and allow the Spotify sign-in popup. Spool keeps its original tab open so
-   privacy browsers cannot clear the temporary PKCE verifier while you are on
-   Spotify. After the popup completes, choose **Connect player**. When Spool
-   reports that the device is ready, choose **Use Spool**. If the browser
-   blocks autoplay, press play once to unlock audio.
+   the same in-memory authorization instance that created the temporary PKCE
+   verifier can validate Spotify's callback. The popup hands the callback to
+   that tab through a same-origin browser channel and closes after the token
+   exchange succeeds. Then choose **Connect player**. When Spool reports that
+   the device is ready, choose **Use Spool**. If the browser blocks autoplay,
+   press play once to unlock audio.
 
 Do not use `localhost`, a different port, or `file://`; Spotify compares the
 redirect URI exactly. The complete authenticated procedure is in

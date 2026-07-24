@@ -42,7 +42,11 @@ test("OAuth callback recovery uses persistent short-lived transaction storage", 
   assert.match(app, /transactionStorage:\s*createOAuthTransactionStorage/u);
   assert.doesNotMatch(app, /transactionStorage:\s*sessionStorage/u);
   assert.match(app, /window\.open\(/u);
-  assert.match(app, /navigate:\s*\(url\)\s*=>\s*popup\.location\.replace\(url\)/u);
+  assert.match(app, /navigate:\s*\(url\)\s*=>\s*oauthPopup\.location\.replace\(url\)/u);
+  assert.match(app, /OAUTH_CALLBACK_MESSAGE/u);
+  assert.match(app, /new BroadcastChannel\(OAUTH_CHANNEL_NAME\)/u);
+  assert.match(app, /auth\.readTransaction\(callbackState\)/u);
+  assert.match(app, /handleCallback\(\{ url: callbackUrl\.href, cleanup: false \}\)/u);
   assert.match(app, /window\.addEventListener\("pageshow"/u);
 });
 

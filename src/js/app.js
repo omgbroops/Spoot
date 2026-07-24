@@ -7,8 +7,8 @@ import {
   SpotifyAuth,
   SpotifyAuthError,
   shouldReloadOAuthPageAfterBfcacheRestore,
-} from "./auth/spotify-auth.js?v=20260723-oauth6";
-import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-oauth6";
+} from "./auth/spotify-auth.js?v=20260723-oauth8";
+import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-oauth8";
 import { DEFAULT_TOKEN_STORAGE_KEY } from "./auth/token-store.js";
 import { SpotifyApiClient, SpotifyApiError } from "./spotify/api-client.js";
 import { SpotifyPlaybackSdk } from "./spotify/playback-sdk.js";
@@ -57,7 +57,10 @@ import { setupToast, showToast } from "./ui/toast.js";
 
 const UI_PREFERENCES_KEY = "spool.ui.preferences";
 const OAUTH_POPUP_NAME = "spool-spotify-auth";
+const OAUTH_CHANNEL_NAME = "spool:oauth";
 const OAUTH_COMPLETE_MESSAGE = "spool:oauth-complete";
+const OAUTH_CALLBACK_MESSAGE = "spool:oauth-callback";
+const OAUTH_RESULT_MESSAGE = "spool:oauth-result";
 const MOCK_SCENARIOS = new Set([
   "default",
   "paused",
@@ -78,6 +81,9 @@ let controllerUnsubscribers = [];
 let queueVisible = true;
 let dockVisible = true;
 let lyricsVisible = false;
+let oauthPopup;
+let oauthCallbackInFlightState;
+const oauthChannel = createOAuthChannel();
 
 window.addEventListener("pageshow", (event) => {
   if (
@@ -91,10 +97,16 @@ window.addEventListener("pageshow", (event) => {
   }
 });
 window.addEventListener("message", (event) => {
-  if (
-    event.origin === location.origin &&
-    event.data?.type === OAUTH_COMPLETE_MESSAGE
-  ) {
+  if (event.origin !== location.origin) return;
+  if (event.data?.type === OAUTH_CALLBACK_MESSAGE) {
+    handleOAuthCallbackMessage(event.data, event.source);
+    return;
+  }
+  if (event.data?.type === OAUTH_RESULT_MESSAGE) {
+    handleOAuthResultMessage(event.data);
+    return;
+  }
+  if (event.data?.type === OAUTH_COMPLETE_MESSAGE) {
     completeOAuthOnOriginalTab();
   }
 });
@@ -152,18 +164,13 @@ async function initialize() {
   const callback = new URL(location.href).searchParams;
   if (callback.has("code") || callback.has("error")) {
     renderConnection("authorizing");
+    if (forwardOAuthCallback()) return;
     try {
       await auth.handleCallback();
       showToast("Spotify connected.");
       if (notifyOAuthOpener()) return;
     } catch (error) {
-      console.warn(
-        "Spotify authorization callback failed.",
-        safeDiagnostic(error, "oauth-callback"),
-      );
-      const state = isAuthorizationExpired(error) ? "authorization-expired" : "error";
-      renderConnection(state, { message: humanizeError(error) });
-      renderSpotifySettings({ loggedIn: false, onConnect: login });
+      renderOAuthCallbackFailure(error);
       return;
     }
   }
@@ -384,12 +391,12 @@ async function login() {
     showSetupHelp();
     return;
   }
-  const popup = window.open(
+  oauthPopup = window.open(
     "about:blank",
     OAUTH_POPUP_NAME,
     "popup=yes,width=560,height=760,resizable=yes,scrollbars=yes",
   );
-  if (!popup) {
+  if (!oauthPopup) {
     renderConnection("error", {
       message: "Allow popups for 127.0.0.1, then try logging in again.",
     });
@@ -401,15 +408,132 @@ async function login() {
   });
   try {
     await auth.beginAuthorization({
-      // Keep the original 127.0.0.1 tab open. Privacy browsers may erase all
-      // first-party storage when the last tab for a site navigates away.
-      navigate: (url) => popup.location.replace(url),
+      // Keep the auth instance that created the verifier alive in this tab.
+      navigate: (url) => oauthPopup.location.replace(url),
     });
-    popup.focus();
+    oauthPopup.focus();
   } catch (error) {
-    popup.close();
+    oauthPopup.close();
+    oauthPopup = undefined;
     renderConnection("error", { message: humanizeError(error) });
   }
+}
+
+async function handleOAuthCallbackMessage(data, source = null) {
+  if (!auth) return;
+  if (source && oauthPopup && source !== oauthPopup) return;
+
+  let callbackUrl;
+  try {
+    callbackUrl = new URL(data?.url);
+    if (callbackUrl.origin !== location.origin) return;
+  } catch {
+    return;
+  }
+
+  const callbackState = callbackUrl.searchParams.get("state");
+  const ownsTransaction = Boolean(
+    callbackState && auth.readTransaction(callbackState),
+  );
+  // Broadcasts reach every open Spool tab. Only the tab whose sessionStorage
+  // owns this state may exchange it. A direct popup message can still surface
+  // a precise missing-transaction error instead of hanging silently.
+  if (!ownsTransaction && !source) return;
+  const inFlightKey = callbackState || "missing-callback-state";
+  if (oauthCallbackInFlightState === inFlightKey) return;
+  oauthCallbackInFlightState = inFlightKey;
+
+  renderConnection("authorizing", {
+    message: "Finishing Spotify sign-in…",
+  });
+  try {
+    await auth.handleCallback({ url: callbackUrl.href, cleanup: false });
+    completeOAuthOnOriginalTab();
+    postOAuthResult(source, { ok: true, state: callbackState });
+  } catch (error) {
+    renderOAuthCallbackFailure(error);
+    postOAuthResult(source, {
+      ok: false,
+      state: callbackState,
+      message: humanizeError(error),
+    });
+  } finally {
+    oauthPopup = undefined;
+    if (oauthCallbackInFlightState === inFlightKey) {
+      oauthCallbackInFlightState = undefined;
+    }
+  }
+}
+
+function postOAuthResult(target, result) {
+  const message = { type: OAUTH_RESULT_MESSAGE, ...result };
+  try {
+    target?.postMessage(message, location.origin);
+  } catch {
+    // The exchange result remains authoritative if the popup was closed early.
+  }
+  try {
+    oauthChannel?.postMessage(message);
+  } catch {}
+}
+
+function forwardOAuthCallback() {
+  const message = { type: OAUTH_CALLBACK_MESSAGE, url: location.href };
+  let forwarded = false;
+  try {
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage(message, location.origin);
+      forwarded = true;
+    }
+  } catch {}
+  try {
+    if (oauthChannel) {
+      oauthChannel.postMessage(message);
+      forwarded = true;
+    }
+  } catch {}
+  return forwarded;
+}
+
+function handleOAuthResultMessage(message) {
+  const callbackState = new URL(location.href).searchParams.get("state");
+  if (!callbackState || message.state !== callbackState) return;
+  if (message.ok) {
+    window.close();
+    return;
+  }
+  renderConnection("error", {
+    message: typeof message.message === "string"
+      ? message.message
+      : "Spotify sign-in could not be completed. Please try again.",
+  });
+}
+
+function createOAuthChannel() {
+  try {
+    if (typeof BroadcastChannel !== "function") return null;
+    const channel = new BroadcastChannel(OAUTH_CHANNEL_NAME);
+    channel.addEventListener("message", (event) => {
+      if (event.data?.type === OAUTH_CALLBACK_MESSAGE) {
+        handleOAuthCallbackMessage(event.data);
+      } else if (event.data?.type === OAUTH_RESULT_MESSAGE) {
+        handleOAuthResultMessage(event.data);
+      }
+    });
+    return channel;
+  } catch {
+    return null;
+  }
+}
+
+function renderOAuthCallbackFailure(error) {
+  console.warn(
+    "Spotify authorization callback failed.",
+    safeDiagnostic(error, "oauth-callback"),
+  );
+  const state = isAuthorizationExpired(error) ? "authorization-expired" : "error";
+  renderConnection(state, { message: humanizeError(error) });
+  renderSpotifySettings({ loggedIn: false, onConnect: login });
 }
 
 function completeOAuthOnOriginalTab() {
