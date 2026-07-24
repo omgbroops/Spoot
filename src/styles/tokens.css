@@ -1,0 +1,20 @@
+:root {
+  --bg: #070708;
+  --glass: rgba(44, 44, 50, 0.42);
+  --glass-2: rgba(30, 30, 35, 0.62);
+  --stroke: rgba(255, 255, 255, 0.13);
+  --stroke-soft: rgba(255, 255, 255, 0.07);
+  --hover: rgba(255, 255, 255, 0.08);
+  --text: #f7f7f8;
+  --text-dim: rgba(247, 247, 248, 0.58);
+  --text-faint: rgba(247, 247, 248, 0.34);
+  --fg: #ffffff;
+  --radius: 26px;
+  --radius-sm: 15px;
+  --hi: inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 0 0 0.5px rgba(255, 255, 255, 0.04);
+  --shadow: 0 24px 70px -22px rgba(0, 0, 0, 0.7);
+  --font: 'Inter', 'SF Pro Display', -apple-system, system-ui, sans-serif;
+  --focus: rgba(255, 255, 255, 0.82);
+  --danger: #ff9b9b;
+  --widget-gutter: 10px;
+}

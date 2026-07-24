@@ -1,0 +1,228 @@
+.player {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 20px;
+  cursor: grab;
+}
+
+.player.dragging,
+.widget.dragging .player {
+  cursor: grabbing;
+}
+
+.art {
+  display: block;
+  width: 180px;
+  height: 180px;
+  flex: 0 0 auto;
+  border-radius: 18px;
+  background: #161619;
+  box-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.7), 0 0 0 0.5px rgba(255, 255, 255, 0.08) inset;
+  object-fit: cover;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.player-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 32px;
+  gap: 3px;
+  margin-bottom: 6px;
+}
+
+.icon-btn {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--text-faint);
+  place-items: center;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.icon-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.icon-btn.active {
+  background: var(--fg);
+  color: #0a0a0b;
+}
+
+.icon-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.track-copy {
+  min-width: 0;
+}
+
+.title {
+  overflow: hidden;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.14;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artist {
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--text-dim);
+  font-size: 14px;
+  font-weight: 450;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 13px;
+}
+
+.t-btn {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  opacity: 0.9;
+  color: var(--text);
+  place-items: center;
+  transition: background 0.14s ease, opacity 0.14s ease;
+}
+
+.t-btn:hover {
+  opacity: 1;
+  background: var(--hover);
+}
+
+.t-btn svg {
+  width: 21px;
+  height: 21px;
+}
+
+.play-btn {
+  width: 48px;
+  height: 48px;
+  opacity: 1;
+}
+
+.play-btn svg {
+  width: 30px;
+  height: 30px;
+}
+
+.ic-pause {
+  display: none;
+}
+
+.is-playing .ic-play {
+  display: none;
+}
+
+.is-playing .ic-pause {
+  display: block;
+}
+
+.progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.seek {
+  position: relative;
+  display: flex;
+  height: 18px;
+  flex: 1;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.seek-track {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.seek-buf,
+.seek-fill {
+  position: absolute;
+  width: 0;
+  border-radius: 6px;
+  inset: 0 auto 0 0;
+}
+
+.seek-buf {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.seek-fill {
+  background: #fff;
+}
+
+.seek-knob {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  opacity: 0;
+  background: #fff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.15s ease;
+}
+
+.seek:hover .seek-knob,
+.seek:focus-visible .seek-knob {
+  opacity: 1;
+}
+
+.loop1 {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.icon-btn svg,
+.dock-btn svg,
+.t-btn svg,
+.im-controls .ic svg,
+.im-side svg,
+.im-top button svg,
+.mini-btn svg,
+.head-ic svg,
+.close-x svg,
+.clr svg {
+  stroke-width: 2.4px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

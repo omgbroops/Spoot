@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Spool</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./src/styles/tokens.css">
+  <link rel="stylesheet" href="./src/styles/base.css">
+  <link rel="stylesheet" href="./src/styles/player.css">
+  <link rel="stylesheet" href="./src/styles/widgets.css">
+  <link rel="stylesheet" href="./src/styles/modals.css">
+  <link rel="stylesheet" href="./src/styles/immersive.css">
+</head>
+<body>
+  <div id="bg-wrap" aria-hidden="true">
+    <div id="bg-art"></div>
+    <div id="bg-tint"></div>
+  </div>
+
+  <section class="connection-status glass" id="connection-status" data-state="not-configured" aria-live="polite">
+    <div class="connection-copy">
+      <strong id="connection-title">Connect Spotify</strong>
+      <span id="connection-message">Add your Spotify Client ID to begin.</span>
+    </div>
+    <div class="connection-actions">
+      <button class="btn primary" id="connection-primary" type="button">Set up Spool</button>
+      <button class="btn" id="connection-secondary" type="button" hidden></button>
+    </div>
+  </section>
+
+  <main id="app-shell">
+    <section class="widget np glass" id="w-nowplaying" aria-label="Now playing">
+      <div class="player" id="player" data-drag-handle>
+        <img id="art" class="art" alt="" draggable="false">
+        <div class="player-main">
+          <div class="topbar">
+            <button class="icon-btn" id="btn-shuffle" type="button" title="Shuffle" aria-label="Shuffle" aria-pressed="false" data-nodrag>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+            </button>
+            <button class="icon-btn" id="btn-loop" type="button" title="Repeat off" aria-label="Repeat off" aria-pressed="false" data-nodrag>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+            </button>
+            <button class="icon-btn" id="btn-immersive" type="button" title="Immersive view" aria-label="Open immersive view" aria-pressed="false" data-nodrag>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+            </button>
+          </div>
+          <div class="track-copy">
+            <div class="title" id="np-title">Nothing playing</div>
+            <div class="artist" id="np-artist">Connect Spotify to start</div>
+          </div>
+          <div class="transport">
+            <button class="t-btn" id="btn-prev" type="button" data-nodrag title="Previous" aria-label="Previous track">
+              <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor"><path d="M6.5 6v12"/><path d="M19 6.4v11.2L9.5 12z"/></svg>
+            </button>
+            <button class="t-btn play-btn" id="btn-play" type="button" data-nodrag title="Play" aria-label="Play">
+              <svg class="ic-play" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+              <svg class="ic-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="2"/><rect x="13.5" y="5" width="4" height="14" rx="2"/></svg>
+            </button>
+            <button class="t-btn" id="btn-next" type="button" data-nodrag title="Next" aria-label="Next track">
+              <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor"><path d="M17.5 6v12"/><path d="M5 6.4v11.2L14.5 12z"/></svg>
+            </button>
+          </div>
+          <div class="progress-row">
+            <span class="time" id="t-cur">0:00</span>
+            <div class="seek" id="seek" data-nodrag role="slider" tabindex="0" aria-label="Playback position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+              <div class="seek-track"><div class="seek-buf" id="seek-buf"></div><div class="seek-fill" id="seek-fill"></div></div>
+              <div class="seek-knob" id="seek-knob"></div>
+            </div>
+            <span class="time right" id="t-dur">0:00</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="widget queue glass" id="w-queue" aria-label="Spotify queue">
+      <div class="panel-head" id="queue-head" data-drag-handle>
+        <span class="lbl">Up Next</span>
+        <button class="clr inactive-control" id="queue-clear" type="button" data-inactive-feature="Clearing the Spotify queue" data-nodrag>Clear</button>
+      </div>
+      <div class="list" id="queue-list" aria-live="polite">
+        <div class="empty">Connect Spotify to see your queue.</div>
+      </div>
+    </section>
+
+    <section class="widget lyrics glass hidden" id="w-lyrics" aria-label="Lyrics">
+      <div class="panel-head" id="lyrics-head" data-drag-handle>
+        <span class="lbl">Lyrics</span>
+        <button class="clr inactive-control" id="lyrics-edit" type="button" data-inactive-feature="Lyrics editing" data-nodrag>Edit</button>
+      </div>
+      <div class="lyr-list" id="lyrics-list"><div class="lyr-empty">Lyrics are not connected yet.</div></div>
+    </section>
+  </main>
+
+  <nav class="dock glass" aria-label="Player tools">
+    <button class="dock-btn" id="dock-library" type="button" title="Library" aria-label="Open Library information">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg>
+    </button>
+    <button class="dock-btn active" id="dock-queue" type="button" title="Up Next (Q)" aria-label="Toggle queue" aria-pressed="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h13M3 12h13M3 18h9M17 14l4 4-4 4M21 18h-4"/></svg>
+    </button>
+    <button class="dock-btn" id="dock-import" type="button" title="Import" aria-label="Open Import information">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+    </button>
+    <button class="dock-btn" id="dock-eq" type="button" title="Sound" aria-label="Open Sound settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+    </button>
+    <button class="dock-btn" id="dock-settings" type="button" title="Settings (S)" aria-label="Open settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </nav>
+
+  <div class="scrim" id="scrim"></div>
+
+  <section class="modal glass" id="modal-library" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="lib-title">
+    <div class="modal-head" data-drag-handle>
+      <div class="modal-title" id="lib-title">Library</div>
+      <div class="head-btns"><button class="head-ic inactive-control" id="lib-new" type="button" title="Playlist editing is not connected in this pass" data-inactive-feature="Playlist editing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg></button><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    </div>
+    <div class="modal-body"><div class="empty">Spotify library browsing is not connected in this pass.</div></div>
+  </section>
+
+  <section class="modal glass" id="modal-eq" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="sound-title">
+    <div class="modal-head" data-drag-handle><div class="modal-title" id="sound-title">Sound</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body inactive-surface" data-inactive-feature="Sound controls" title="Sound controls are preserved but not connected to Spotify in this pass">
+      <div class="setting"><div class="setting-label">Speed <span class="val" id="speed-val">1.00×</span></div><input type="range" id="speed-range" min="0.25" max="2.5" step="0.01" value="1" tabindex="-1"></div>
+      <div class="setting"><div class="setting-label">Volume <span class="val" id="vol-val">100%</span></div><input type="range" id="vol-range" min="0" max="1" step="0.01" value="1" tabindex="-1"></div>
+      <div class="setting"><div class="setting-label">Reverb <span class="val" id="rev-val">0%</span></div><input type="range" id="rev-range" min="0" max="1" step="0.01" value="0" tabindex="-1"></div>
+      <div class="row-setting"><div class="name">Crossfade <span class="val" id="cf-val">6s</span></div><div class="toggle" id="tg-cf" aria-hidden="true"></div></div>
+      <div class="setting sound-subsetting"><input type="range" id="cf-range" min="0" max="12" step="1" value="6" tabindex="-1"></div>
+      <div class="row-setting"><div class="name">Gapless playback</div><div class="toggle" id="tg-gapless" aria-hidden="true"></div></div>
+      <div class="setting eq-setting"><div class="setting-label">Equalizer <div class="toggle on" id="tg-eq" aria-hidden="true"></div></div><div class="eq-presets" id="eq-presets"><button class="chip active" type="button" tabindex="-1">Flat</button><button class="chip" type="button" tabindex="-1">Bass Boost</button><button class="chip" type="button" tabindex="-1">Vocal</button><button class="chip" type="button" tabindex="-1">Treble</button><button class="chip" type="button" tabindex="-1">Lo-Fi</button><button class="chip" type="button" tabindex="-1">Podcast</button></div><div class="eq-wrap" id="eq-wrap">
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">60</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">150</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">400</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">1k</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">2.4k</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">6k</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">9k</span></label>
+        <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" tabindex="-1"><span class="eq-freq">14k</span></label>
+      </div></div>
+    </div>
+  </section>
+
+  <section class="modal glass" id="modal-settings" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="settings-title">
+    <div class="modal-head" data-drag-handle><div class="modal-title" id="settings-title">Settings</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <div class="setting-label">Spotify</div>
+      <div class="row-setting spotify-setting"><div><div class="name" id="spotify-account-status">Not connected</div><div class="setting-note" id="spotify-device-status">Spool device unavailable</div></div><div class="btn-row"><button class="btn primary" id="settings-connect" type="button">Log in</button><button class="btn" id="settings-transfer" type="button" hidden>Use Spool</button><button class="btn" id="settings-disconnect" type="button" hidden>Log out</button></div></div>
+      <div class="legacy-settings inactive-surface" data-inactive-feature="Legacy player settings" title="These settings are preserved but not connected to Spotify in this pass">
+        <div class="row-setting"><div class="name">Show song in media player</div><div class="toggle on" id="tg-media" aria-hidden="true"></div></div>
+        <div class="row-setting"><div class="name">Headphone click → skip</div><div class="toggle" id="tg-clickskip" aria-hidden="true"></div></div>
+        <div class="row-setting"><div class="name">Ambient audio reaction</div><div class="toggle" id="tg-viz" aria-hidden="true"></div></div>
+        <div class="row-setting"><div class="name">Sleep timer</div><span class="val">Off</span></div>
+        <div class="row-setting"><div class="name">Dropbox</div><span class="val">Not connected</span></div>
+        <div class="row-setting"><div class="name">Listening stats</div><button class="btn" id="btn-stats" type="button" tabindex="-1">View</button></div>
+        <div class="row-setting"><div class="name">Local player data</div><button class="btn" id="btn-clear" type="button" tabindex="-1">Clear all</button></div>
+      </div>
+      <div class="setting-label shortcuts-label">Shortcuts</div>
+      <div class="kbd-grid" id="kbd-grid">
+        <div class="kbd"><b>Space</b></div><div class="kbd-act">Play / pause</div>
+        <div class="kbd"><b>←</b><span>/</span><b>→</b></div><div class="kbd-act">Seek 5s</div>
+        <div class="kbd"><b>⇧</b><b>←</b><span>/</span><b>→</b></div><div class="kbd-act">Previous / next track</div>
+        <div class="kbd"><b>Q</b></div><div class="kbd-act">Up Next</div>
+        <div class="kbd"><b>F</b></div><div class="kbd-act">Immersive view</div>
+        <div class="kbd"><b>Esc</b></div><div class="kbd-act">Close</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="modal glass" id="modal-import" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="import-title">
+    <div class="modal-head" data-drag-handle><div class="modal-title" id="import-title">Import</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body inactive-surface" data-inactive-feature="Music importing"><button class="btn primary btn-full" type="button" tabindex="-1">From this computer</button><button class="btn btn-full modal-button-gap" type="button" tabindex="-1">From Dropbox</button></div>
+  </section>
+
+  <section class="modal glass" id="modal-stats" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="stats-title">
+    <div class="modal-head" data-drag-handle><div class="modal-title" id="stats-title">Listening stats</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body"><div class="empty">Listening statistics are not connected in this pass.</div></div>
+  </section>
+
+  <section class="modal glass" id="modal-playlist" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="playlist-title">
+    <div class="modal-head" data-drag-handle><div class="modal-title" id="playlist-title">Add to playlist</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body"><div class="empty">Playlist editing is not connected in this pass.</div></div>
+  </section>
+
+  <section class="modal glass" id="modal-lyrics" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="lyrics-title">
+    <div class="modal-head" data-drag-handle><div class="modal-title" id="lyrics-title">Lyrics</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body"><div class="lyr-empty">Lyrics are not connected yet.</div></div>
+  </section>
+
+  <section id="immersive" aria-label="Immersive player" aria-hidden="true">
+    <div id="im-bg" aria-hidden="true"></div><div id="im-bg-tint" aria-hidden="true"></div>
+    <div class="im-top"><button id="im-collapse" type="button" title="Exit immersive" aria-label="Exit immersive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg></button></div>
+    <div class="im-stage">
+      <div class="im-left">
+        <img class="im-art" id="im-art" alt="" draggable="false">
+        <div class="im-meta">
+          <div class="im-title" id="im-title">Nothing playing</div>
+          <div class="im-artist" id="im-artist">Connect Spotify to start</div>
+          <div class="im-prog"><span class="time" id="im-cur">0:00</span><div class="seek" id="im-seek" role="slider" tabindex="0" aria-label="Playback position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div class="seek-track"><div class="seek-fill" id="im-fill"></div></div><div class="seek-knob" id="im-knob"></div></div><span class="time" id="im-dur">-0:00</span></div>
+          <div class="im-controls">
+            <button class="ic" id="im-prev" type="button" aria-label="Previous track"><svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor"><path d="M6.5 6v12"/><path d="M19 6.4v11.2L9.5 12z"/></svg></button>
+            <button class="ic big" id="im-play" type="button" aria-label="Play"><svg class="ic-play" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg><svg class="ic-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="2"/><rect x="13.5" y="5" width="4" height="14" rx="2"/></svg></button>
+            <button class="ic" id="im-next" type="button" aria-label="Next track"><svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor"><path d="M17.5 6v12"/><path d="M5 6.4v11.2L14.5 12z"/></svg></button>
+          </div>
+          <div class="im-side">
+            <button id="im-shuffle" type="button" title="Shuffle" aria-label="Shuffle" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></button>
+            <button id="im-loop" type="button" title="Repeat off" aria-label="Repeat off" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>
+            <button id="im-lyrics-btn" type="button" title="Lyrics" aria-label="Toggle lyrics" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+          </div>
+        </div>
+      </div>
+      <div class="im-lyrics lyr-list" id="im-lyrics"><div class="lyr-empty">Lyrics are not connected yet.</div></div>
+    </div>
+  </section>
+
+  <div id="blank" aria-hidden="true"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="./src/js/app.js"></script>
+</body>
+</html>

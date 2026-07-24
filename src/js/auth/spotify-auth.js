@@ -296,6 +296,7 @@ export class SpotifyAuth {
       );
       return { handled: true, tokens };
     } finally {
+      this.clearTransaction();
       if (cleanup) this.cleanupCallbackUrl(url);
     }
   }
