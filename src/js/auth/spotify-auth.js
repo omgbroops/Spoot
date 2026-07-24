@@ -113,6 +113,20 @@ export function cleanSpotifyCallbackPath(
   return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 }
 
+export function shouldReloadOAuthPageAfterBfcacheRestore({
+  persisted,
+  url,
+  connectionState,
+} = {}) {
+  if (!persisted || !url) return false;
+  const parameters = parseUrl(url).searchParams;
+  return (
+    parameters.has("code") ||
+    parameters.has("error") ||
+    connectionState === "authorizing"
+  );
+}
+
 export class SpotifyAuth {
   constructor({
     clientId,

@@ -12,6 +12,7 @@ import {
   SpotifyAuth,
   SpotifyAuthError,
   cleanSpotifyCallbackPath,
+  shouldReloadOAuthPageAfterBfcacheRestore,
 } from "../src/js/auth/spotify-auth.js";
 import {
   TokenStore,
@@ -182,6 +183,41 @@ test("SpotifyAuth keeps overlapping PKCE attempts isolated by OAuth state", asyn
   });
   assert.deepEqual(exchangedCodes, ["first-code", "second-code"]);
   assert.equal(transactionStorage.getItem("spool.auth.pkce"), null);
+});
+
+test("OAuth callbacks restored from the back-forward cache trigger one real reload", () => {
+  assert.equal(
+    shouldReloadOAuthPageAfterBfcacheRestore({
+      persisted: true,
+      url: "http://127.0.0.1:5173/?code=callback-code&state=callback-state",
+      connectionState: "authorizing",
+    }),
+    true,
+  );
+  assert.equal(
+    shouldReloadOAuthPageAfterBfcacheRestore({
+      persisted: true,
+      url: "http://127.0.0.1:5173/",
+      connectionState: "authorizing",
+    }),
+    true,
+  );
+  assert.equal(
+    shouldReloadOAuthPageAfterBfcacheRestore({
+      persisted: false,
+      url: "http://127.0.0.1:5173/?code=callback-code",
+      connectionState: "authorizing",
+    }),
+    false,
+  );
+  assert.equal(
+    shouldReloadOAuthPageAfterBfcacheRestore({
+      persisted: true,
+      url: "http://127.0.0.1:5173/",
+      connectionState: "active",
+    }),
+    false,
+  );
 });
 
 test("SpotifyAuth rejects mismatched state without destroying another pending attempt", async () => {

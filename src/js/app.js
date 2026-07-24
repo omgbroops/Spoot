@@ -3,7 +3,11 @@ import {
   loadConfig,
   validateDevelopmentOrigin,
 } from "./config.js";
-import { SpotifyAuth, SpotifyAuthError } from "./auth/spotify-auth.js";
+import {
+  SpotifyAuth,
+  SpotifyAuthError,
+  shouldReloadOAuthPageAfterBfcacheRestore,
+} from "./auth/spotify-auth.js";
 import { SpotifyApiClient, SpotifyApiError } from "./spotify/api-client.js";
 import { SpotifyPlaybackSdk } from "./spotify/playback-sdk.js";
 import { PlaybackController } from "./spotify/playback-controller.js";
@@ -70,6 +74,18 @@ let controllerUnsubscribers = [];
 let queueVisible = true;
 let dockVisible = true;
 let lyricsVisible = false;
+
+window.addEventListener("pageshow", (event) => {
+  if (
+    shouldReloadOAuthPageAfterBfcacheRestore({
+      persisted: event.persisted,
+      url: location.href,
+      connectionState,
+    })
+  ) {
+    location.reload();
+  }
+});
 
 await initialize().catch((error) => {
   console.error("Spool initialization failed.", safeDiagnostic(error));
@@ -344,7 +360,11 @@ async function login() {
   }
   renderConnection("authorizing");
   try {
-    await auth.beginAuthorization();
+    await auth.beginAuthorization({
+      // Replacing the Spool history entry keeps Chromium from restoring the
+      // frozen pre-login page instead of booting the OAuth callback URL.
+      navigate: (url) => location.replace(url),
+    });
   } catch (error) {
     renderConnection("error", { message: humanizeError(error) });
   }
