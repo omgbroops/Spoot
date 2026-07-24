@@ -107,7 +107,7 @@ Spool uses small, explicit browser-storage namespaces:
 | Namespace/key | Storage | Owner | Data |
 | --- | --- | --- | --- |
 | `spool.auth.tokens` | `localStorage` | token store | access/refresh tokens, access and refresh expiry timestamps, authorization time, token type, granted scopes |
-| `spool.auth.pkce` | `sessionStorage` | Spotify auth | short-lived verifier, OAuth state, and creation timestamp; cleared after callback/logout |
+| `spool.auth.pkce` | `localStorage` | Spotify auth | capped, short-lived verifier/state transactions keyed by OAuth state; the matching entry is consumed after callback and stale entries are pruned |
 | `spool.ui.widget-positions` | `localStorage` | `ui/widgets.js` | saved `{x, y}` positions for the Now Playing, queue, and lyrics widgets |
 | `spool.ui.preferences` | `localStorage` | `app.js` | queue, dock, and lyrics-widget visibility |
 

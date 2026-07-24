@@ -37,6 +37,12 @@ test("Spotify runtime cannot initialize the dormant local audio engine", () => {
   assert.doesNotMatch(runtime, /\bDROPBOX_APP_KEY\b/);
 });
 
+test("OAuth callback recovery uses persistent short-lived transaction storage", () => {
+  const app = readFileSync(join(root, "src/js/app.js"), "utf8");
+  assert.match(app, /transactionStorage:\s*localStorage/u);
+  assert.doesNotMatch(app, /transactionStorage:\s*sessionStorage/u);
+});
+
 test("the static application has no React dependency or hidden first-run body", () => {
   const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   assert.equal(manifest.dependencies?.react, undefined);

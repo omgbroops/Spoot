@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# This imported artifact is verified byte-for-byte against its recorded hash.
+reference/original-local-player.html -text

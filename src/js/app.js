@@ -107,7 +107,9 @@ async function initialize() {
     redirectUri: config.redirectUri,
     scopes: config.scopes,
     storage: localStorage,
-    transactionStorage: sessionStorage,
+    // Spotify can return through a fresh browsing context. Keep only the
+    // short-lived PKCE transaction here, then consume it on the callback.
+    transactionStorage: localStorage,
   });
 
   const callback = new URL(location.href).searchParams;
@@ -117,7 +119,6 @@ async function initialize() {
       await auth.handleCallback();
       showToast("Spotify connected.");
     } catch (error) {
-      auth.clearTransaction();
       const state = isAuthorizationExpired(error) ? "authorization-expired" : "error";
       renderConnection(state, { message: humanizeError(error) });
       renderSpotifySettings({ loggedIn: false, onConnect: login });

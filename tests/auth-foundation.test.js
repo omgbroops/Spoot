@@ -123,7 +123,7 @@ test("SpotifyAuth validates callback state, exchanges tokens, and cleans OAuth p
     "streaming user-read-playback-state",
   );
 
-  const callback = `http://127.0.0.1:5173/?keep=1&code=auth-code&state=${state}#player`;
+  const callback = `http://127.0.0.1:5173/?keep=1&code=auth-code&state=${state}&ubi=spotify-browser-context#player`;
   const result = await auth.handleCallback({ url: callback });
   assert.equal(result.handled, true);
   assert.equal(result.tokens.accessToken, "access-one");
@@ -146,7 +146,45 @@ test("SpotifyAuth validates callback state, exchanges tokens, and cleans OAuth p
   );
 });
 
-test("SpotifyAuth rejects mismatched state before token exchange and still cleans the URL", async () => {
+test("SpotifyAuth keeps overlapping PKCE attempts isolated by OAuth state", async () => {
+  const storage = new MemoryStorage();
+  const transactionStorage = new MemoryStorage();
+  const exchangedCodes = [];
+  const auth = new SpotifyAuth({
+    clientId: "client-id",
+    redirectUri: "http://127.0.0.1:5173/",
+    fetchImpl: async (_url, options) => {
+      exchangedCodes.push(options.body.get("code"));
+      return jsonResponse({
+        access_token: `access-${exchangedCodes.length}`,
+        refresh_token: "refresh-token",
+        expires_in: 3600,
+      });
+    },
+    storage,
+    transactionStorage,
+    clock: () => 25_000,
+    cryptoImpl: webcrypto,
+    locationImpl: { origin: "http://127.0.0.1:5173" },
+    historyImpl: { replaceState: () => {} },
+  });
+
+  const firstState = new URL(await auth.createAuthorizationUrl()).searchParams.get("state");
+  const secondState = new URL(await auth.createAuthorizationUrl()).searchParams.get("state");
+
+  await auth.handleCallback({
+    url: `http://127.0.0.1:5173/?code=first-code&state=${firstState}`,
+  });
+  assert.equal(auth.readTransaction(secondState)?.state, secondState);
+
+  await auth.handleCallback({
+    url: `http://127.0.0.1:5173/?code=second-code&state=${secondState}`,
+  });
+  assert.deepEqual(exchangedCodes, ["first-code", "second-code"]);
+  assert.equal(transactionStorage.getItem("spool.auth.pkce"), null);
+});
+
+test("SpotifyAuth rejects mismatched state without destroying another pending attempt", async () => {
   const storage = new MemoryStorage();
   const session = new MemoryStorage();
   const historyCalls = [];
@@ -177,7 +215,7 @@ test("SpotifyAuth rejects mismatched state before token exchange and still clean
       error instanceof SpotifyAuthError && error.code === "invalid_state",
   );
   assert.equal(fetchCount, 0);
-  assert.equal(session.values.size, 0, "temporary PKCE data is cleared");
+  assert.equal(session.values.size, 1, "the unrelated pending attempt is preserved");
   assert.equal(historyCalls.at(-1).at(-1), "/");
 });
 

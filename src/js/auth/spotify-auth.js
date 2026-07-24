@@ -16,6 +16,8 @@ export const SPOTIFY_TOKEN_ENDPOINT =
 export const DEFAULT_OAUTH_TRANSACTION_KEY = "spool.auth.pkce";
 export const DEFAULT_TOKEN_EXPIRY_SKEW_MS = 60_000;
 export const DEFAULT_OAUTH_TRANSACTION_TTL_MS = 10 * 60 * 1000;
+export const DEFAULT_MAX_PENDING_OAUTH_TRANSACTIONS = 4;
+const OAUTH_TRANSACTION_STORAGE_VERSION = 2;
 
 function clockNow(clock) {
   return typeof clock === "function" ? clock() : clock.now();
@@ -103,6 +105,7 @@ export function cleanSpotifyCallbackPath(
     "error",
     "error_description",
     "error_uri",
+    "ubi",
   ]) {
     parsed.searchParams.delete(parameter);
   }
@@ -127,6 +130,7 @@ export class SpotifyAuth {
     tokenEndpoint = SPOTIFY_TOKEN_ENDPOINT,
     transactionKey = DEFAULT_OAUTH_TRANSACTION_KEY,
     transactionTtlMs = DEFAULT_OAUTH_TRANSACTION_TTL_MS,
+    maxPendingTransactions = DEFAULT_MAX_PENDING_OAUTH_TRANSACTIONS,
     expirySkewMs = DEFAULT_TOKEN_EXPIRY_SKEW_MS,
     refreshTokenLifetimeMs = null,
   } = {}) {
@@ -138,6 +142,9 @@ export class SpotifyAuth {
     }
     if (typeof fetchImpl !== "function") {
       throw new TypeError("SpotifyAuth requires a fetch implementation.");
+    }
+    if (!Number.isInteger(maxPendingTransactions) || maxPendingTransactions < 1) {
+      throw new TypeError("SpotifyAuth requires at least one pending OAuth transaction slot.");
     }
 
     this.clientId = clientId.trim();
@@ -152,6 +159,7 @@ export class SpotifyAuth {
     this.tokenEndpoint = tokenEndpoint;
     this.transactionKey = transactionKey;
     this.transactionTtlMs = transactionTtlMs;
+    this.maxPendingTransactions = maxPendingTransactions;
     this.expirySkewMs = expirySkewMs;
     this.refreshTokenLifetimeMs = refreshTokenLifetimeMs;
     this.tokenStore =
@@ -179,10 +187,9 @@ export class SpotifyAuth {
     });
     const createdAt = clockNow(this.clock);
 
-    this.transactionStorage.setItem(
-      this.transactionKey,
-      JSON.stringify({ verifier, state, createdAt }),
-    );
+    const transactions = this.readTransactions();
+    transactions.push({ verifier, state, createdAt });
+    this.writeTransactions(transactions.slice(-this.maxPendingTransactions));
 
     const url = new URL(this.authorizeEndpoint);
     url.searchParams.set("client_id", this.clientId);
@@ -212,28 +219,67 @@ export class SpotifyAuth {
     return url;
   }
 
-  readTransaction() {
+  readTransactions() {
     const raw = this.transactionStorage.getItem(this.transactionKey);
-    if (!raw) return null;
+    if (!raw) return [];
 
     try {
       const value = JSON.parse(raw);
+      const candidates = Array.isArray(value?.transactions)
+        ? value.transactions
+        : [value];
+      const now = clockNow(this.clock);
+      const transactions = candidates.filter((transaction) =>
+        isValidTransaction(transaction) &&
+        now - Number(transaction.createdAt) <= this.transactionTtlMs
+      );
+
       if (
-        typeof value?.verifier !== "string" ||
-        typeof value?.state !== "string" ||
-        !Number.isFinite(Number(value?.createdAt))
+        value?.version !== OAUTH_TRANSACTION_STORAGE_VERSION ||
+        transactions.length !== candidates.length
       ) {
-        throw new Error("Malformed OAuth transaction.");
+        this.writeTransactions(transactions);
       }
-      return value;
+      return transactions;
     } catch {
       this.clearTransaction();
-      return null;
+      return [];
     }
   }
 
-  clearTransaction() {
-    this.transactionStorage.removeItem(this.transactionKey);
+  readTransaction(state) {
+    const transactions = this.readTransactions();
+    if (typeof state !== "string" || !state) {
+      return transactions.at(-1) ?? null;
+    }
+    return transactions.find((transaction) =>
+      oauthStatesMatch(state, transaction.state)
+    ) ?? null;
+  }
+
+  writeTransactions(transactions) {
+    if (!transactions.length) {
+      this.transactionStorage.removeItem(this.transactionKey);
+      return;
+    }
+    this.transactionStorage.setItem(
+      this.transactionKey,
+      JSON.stringify({
+        version: OAUTH_TRANSACTION_STORAGE_VERSION,
+        transactions,
+      }),
+    );
+  }
+
+  clearTransaction(state) {
+    if (typeof state !== "string" || !state) {
+      this.transactionStorage.removeItem(this.transactionKey);
+      return;
+    }
+    const transactions = this.readTransactions().filter((transaction) =>
+      !oauthStatesMatch(state, transaction.state)
+    );
+    this.writeTransactions(transactions);
   }
 
   cleanupCallbackUrl(url = this.location?.href) {
@@ -260,25 +306,17 @@ export class SpotifyAuth {
     if (!handled) return { handled: false, tokens: null };
 
     try {
-      const transaction = this.readTransaction();
-      const expired =
-        transaction &&
-        clockNow(this.clock) - Number(transaction.createdAt) >
-          this.transactionTtlMs;
+      const transaction = this.readTransaction(receivedState);
 
       if (
         !transaction ||
-        expired ||
         !oauthStatesMatch(receivedState, transaction.state)
       ) {
-        this.clearTransaction();
         throw new SpotifyAuthError(
-          "Spotify sign-in could not be verified. Please try connecting again.",
+          "Spotify sign-in could not be verified. The login attempt may have expired or returned in a different browser context. Please try again.",
           { code: "invalid_state" },
         );
       }
-
-      this.clearTransaction();
 
       if (oauthError) {
         throw new SpotifyAuthError(
@@ -296,7 +334,7 @@ export class SpotifyAuth {
       );
       return { handled: true, tokens };
     } finally {
-      this.clearTransaction();
+      if (receivedState) this.clearTransaction(receivedState);
       if (cleanup) this.cleanupCallbackUrl(url);
     }
   }
@@ -451,4 +489,13 @@ export class SpotifyAuth {
 
 export function createSpotifyAuth(options) {
   return new SpotifyAuth(options);
+}
+
+function isValidTransaction(transaction) {
+  return Boolean(
+    transaction &&
+      typeof transaction.verifier === "string" &&
+      typeof transaction.state === "string" &&
+      Number.isFinite(Number(transaction.createdAt)),
+  );
 }
