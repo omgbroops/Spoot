@@ -1,0 +1,162 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  SpotifyApiClient,
+  SpotifyApiError,
+} from "../src/js/spotify/api-client.js";
+
+function jsonResponse(payload, { status = 200, headers = {} } = {}) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "content-type": "application/json", ...headers },
+  });
+}
+
+test("API client handles 204 responses and forwards AbortSignal", async () => {
+  const controller = new AbortController();
+  let observed;
+  const client = new SpotifyApiClient({
+    tokenProvider: async () => "access",
+    fetchImpl: async (url, options) => {
+      observed = { url, options };
+      return new Response(null, { status: 204 });
+    },
+  });
+
+  assert.equal(
+    await client.pausePlayback({ deviceId: "device-1", signal: controller.signal }),
+    null,
+  );
+  assert.equal(observed.options.signal, controller.signal);
+  assert.equal(observed.options.method, "PUT");
+  assert.match(observed.url, /me\/player\/pause\?device_id=device-1$/u);
+});
+
+test("API client retries a 401 exactly once with a forced fresh token", async () => {
+  const tokenRequests = [];
+  const requests = [];
+  const client = new SpotifyApiClient({
+    tokenProvider: async ({ forceRefresh }) => {
+      tokenRequests.push(forceRefresh);
+      return forceRefresh ? "fresh-token" : "stale-token";
+    },
+    fetchImpl: async (_url, options) => {
+      requests.push(options.headers.get("Authorization"));
+      return requests.length === 1
+        ? jsonResponse({ error: { status: 401, message: "Expired" } }, { status: 401 })
+        : jsonResponse({ is_playing: false });
+    },
+  });
+
+  assert.deepEqual(await client.getPlaybackState(), { is_playing: false });
+  assert.deepEqual(tokenRequests, [false, true]);
+  assert.deepEqual(requests, ["Bearer stale-token", "Bearer fresh-token"]);
+});
+
+test("API client honors Retry-After once but never retries QUOTA_EXCEEDED", async () => {
+  const sleeps = [];
+  let requestCount = 0;
+  const client = new SpotifyApiClient({
+    tokenProvider: async () => "access",
+    sleep: async (milliseconds) => sleeps.push(milliseconds),
+    fetchImpl: async () => {
+      requestCount += 1;
+      return requestCount === 1
+        ? jsonResponse(
+            { error: { status: 429, message: "Slow down" } },
+            { status: 429, headers: { "retry-after": "2" } },
+          )
+        : jsonResponse({ queue: [] });
+    },
+  });
+
+  assert.deepEqual(await client.getQueue(), { queue: [] });
+  assert.equal(requestCount, 2);
+  assert.deepEqual(sleeps, [2_000]);
+
+  let quotaCalls = 0;
+  const quotaClient = new SpotifyApiClient({
+    tokenProvider: async () => "access",
+    sleep: async () => assert.fail("Quota exhaustion must not be retried."),
+    fetchImpl: async () => {
+      quotaCalls += 1;
+      return jsonResponse(
+        {
+          error: {
+            status: 429,
+            message: "Too many requests",
+            reason: "QUOTA_EXCEEDED",
+          },
+        },
+        { status: 429, headers: { "retry-after": "1" } },
+      );
+    },
+  });
+  await assert.rejects(
+    quotaClient.getQueue(),
+    (error) =>
+      error instanceof SpotifyApiError &&
+      error.status === 429 &&
+      error.reason === "QUOTA_EXCEEDED",
+  );
+  assert.equal(quotaCalls, 1);
+});
+
+test("playback-state hydration is deduplicated while an un-signaled request is in flight", async () => {
+  let release;
+  let fetchCount = 0;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const client = new SpotifyApiClient({
+    tokenProvider: async () => "access",
+    fetchImpl: async () => {
+      fetchCount += 1;
+      await gate;
+      return jsonResponse({ is_playing: true });
+    },
+  });
+
+  const first = client.getPlaybackState();
+  const second = client.getPlaybackState();
+  assert.equal(first, second);
+  assert.equal(fetchCount, 0);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(fetchCount, 1);
+  release();
+  assert.deepEqual(await first, { is_playing: true });
+  assert.deepEqual(await second, { is_playing: true });
+});
+
+test("focused playback and queue methods use documented methods, bodies, and query parameters", async () => {
+  const requests = [];
+  const client = new SpotifyApiClient({
+    tokenProvider: async () => "access",
+    fetchImpl: async (url, options) => {
+      requests.push({ url: new URL(url), options });
+      return new Response(null, { status: 204 });
+    },
+  });
+
+  await client.transferPlayback("spool-device", { play: false });
+  await client.seek(1_234.6, { deviceId: "spool-device" });
+  await client.setShuffle(true, { deviceId: "spool-device" });
+  await client.setRepeat("track", { deviceId: "spool-device" });
+  await client.addToQueue("spotify:episode:episode-1", {
+    deviceId: "spool-device",
+  });
+
+  assert.equal(requests[0].options.method, "PUT");
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    device_ids: ["spool-device"],
+    play: false,
+  });
+  assert.equal(requests[1].url.searchParams.get("position_ms"), "1235");
+  assert.equal(requests[2].url.searchParams.get("state"), "true");
+  assert.equal(requests[3].url.searchParams.get("state"), "track");
+  assert.equal(
+    requests[4].url.searchParams.get("uri"),
+    "spotify:episode:episode-1",
+  );
+});
