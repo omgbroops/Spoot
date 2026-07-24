@@ -39,7 +39,7 @@ test("Spotify runtime cannot initialize the dormant local audio engine", () => {
 
 test("OAuth callback recovery uses persistent short-lived transaction storage", () => {
   const app = readFileSync(join(root, "src/js/app.js"), "utf8");
-  assert.match(app, /transactionStorage:\s*localStorage/u);
+  assert.match(app, /transactionStorage:\s*createOAuthTransactionStorage/u);
   assert.doesNotMatch(app, /transactionStorage:\s*sessionStorage/u);
   assert.match(app, /navigate:\s*\(url\)\s*=>\s*location\.replace\(url\)/u);
   assert.match(app, /window\.addEventListener\("pageshow"/u);
@@ -65,7 +65,7 @@ test("all static relative JavaScript imports resolve", () => {
   for (const file of jsFiles) {
     const source = readFileSync(file, "utf8");
     for (const match of source.matchAll(importPattern)) {
-      const target = resolve(dirname(file), match[1]);
+      const target = resolve(dirname(file), match[1].split(/[?#]/u, 1)[0]);
       assert.equal(existsSync(target), true, `${file} imports missing ${target}`);
     }
   }

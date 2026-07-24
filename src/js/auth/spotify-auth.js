@@ -320,15 +320,31 @@ export class SpotifyAuth {
     if (!handled) return { handled: false, tokens: null };
 
     try {
-      const transaction = this.readTransaction(receivedState);
+      const transactions = this.readTransactions();
+      const transaction = typeof receivedState === "string" && receivedState
+        ? transactions.find((candidate) =>
+            oauthStatesMatch(receivedState, candidate.state)
+          ) ?? null
+        : null;
 
       if (
         !transaction ||
         !oauthStatesMatch(receivedState, transaction.state)
       ) {
+        const reason = !receivedState
+          ? "missing_callback_state"
+          : transactions.length
+            ? "state_mismatch"
+            : "missing_transaction";
         throw new SpotifyAuthError(
           "Spotify sign-in could not be verified. The login attempt may have expired or returned in a different browser context. Please try again.",
-          { code: "invalid_state" },
+          {
+            code: "invalid_state",
+            details: {
+              reason,
+              pendingTransactionCount: transactions.length,
+            },
+          },
         );
       }
 

@@ -7,7 +7,8 @@ import {
   SpotifyAuth,
   SpotifyAuthError,
   shouldReloadOAuthPageAfterBfcacheRestore,
-} from "./auth/spotify-auth.js";
+} from "./auth/spotify-auth.js?v=20260723-oauth5";
+import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-oauth5";
 import { SpotifyApiClient, SpotifyApiError } from "./spotify/api-client.js";
 import { SpotifyPlaybackSdk } from "./spotify/playback-sdk.js";
 import { PlaybackController } from "./spotify/playback-controller.js";
@@ -123,9 +124,13 @@ async function initialize() {
     redirectUri: config.redirectUri,
     scopes: config.scopes,
     storage: localStorage,
-    // Spotify can return through a fresh browsing context. Keep only the
-    // short-lived PKCE transaction here, then consume it on the callback.
-    transactionStorage: localStorage,
+    // Mirror the short-lived verifier across both browser storage scopes: the
+    // current tab can use sessionStorage, while a fresh callback tab can fall
+    // back to same-origin localStorage. The matching entry is then consumed.
+    transactionStorage: createOAuthTransactionStorage({
+      localStorage,
+      sessionStorage,
+    }),
   });
 
   const callback = new URL(location.href).searchParams;
@@ -135,6 +140,10 @@ async function initialize() {
       await auth.handleCallback();
       showToast("Spotify connected.");
     } catch (error) {
+      console.warn(
+        "Spotify authorization callback failed.",
+        safeDiagnostic(error, "oauth-callback"),
+      );
       const state = isAuthorizationExpired(error) ? "authorization-expired" : "error";
       renderConnection(state, { message: humanizeError(error) });
       renderSpotifySettings({ loggedIn: false, onConnect: login });
@@ -616,7 +625,15 @@ function humanizeError(error) {
   }
   if (error instanceof SpotifyAuthError) {
     if (error.code === "access_denied") return "Spotify authorization was denied.";
-    if (error.code === "invalid_state") return "Spotify sign-in could not be verified. Please try again.";
+    if (error.code === "invalid_state") {
+      if (error.details?.reason === "missing_transaction") {
+        return "Spotify returned, but this tab lost the temporary login verifier. Close other Spool tabs, reload, and try again.";
+      }
+      if (error.details?.reason === "state_mismatch") {
+        return "Spotify returned a different login state. Close other Spool tabs, reload, and try again.";
+      }
+      return "Spotify sign-in returned without its verification state. Please reload and try again.";
+    }
     if (isAuthorizationExpired(error)) return "Spotify authorization expired. Log in again.";
   }
   if (navigator.onLine === false) return "The network is offline.";
@@ -638,6 +655,8 @@ function safeDiagnostic(error, operation) {
     code: error?.code,
     status: error?.status,
     reason: error?.reason,
+    authReason: error?.details?.reason,
+    pendingTransactions: error?.details?.pendingTransactionCount,
     operation,
     message: error?.message,
   };

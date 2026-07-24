@@ -18,6 +18,7 @@ import {
   TokenStore,
   spotifyRefreshExpiryFrom,
 } from "../src/js/auth/token-store.js";
+import { createOAuthTransactionStorage } from "../src/js/auth/transaction-storage.js";
 
 class MemoryStorage {
   constructor() {
@@ -147,6 +148,27 @@ test("SpotifyAuth validates callback state, exchanges tokens, and cleans OAuth p
   );
 });
 
+test("OAuth transaction storage mirrors the login attempt and survives a fresh tab", () => {
+  const local = new MemoryStorage();
+  const firstSession = new MemoryStorage();
+  const firstTab = createOAuthTransactionStorage({
+    localStorage: local,
+    sessionStorage: firstSession,
+  });
+  firstTab.setItem("spool.auth.pkce", "pending-transaction");
+
+  assert.equal(firstSession.getItem("spool.auth.pkce"), "pending-transaction");
+  assert.equal(local.getItem("spool.auth.pkce"), "pending-transaction");
+
+  const callbackTab = createOAuthTransactionStorage({
+    localStorage: local,
+    sessionStorage: new MemoryStorage(),
+  });
+  assert.equal(callbackTab.getItem("spool.auth.pkce"), "pending-transaction");
+  callbackTab.removeItem("spool.auth.pkce");
+  assert.equal(local.getItem("spool.auth.pkce"), null);
+});
+
 test("SpotifyAuth keeps overlapping PKCE attempts isolated by OAuth state", async () => {
   const storage = new MemoryStorage();
   const transactionStorage = new MemoryStorage();
@@ -243,16 +265,45 @@ test("SpotifyAuth rejects mismatched state without destroying another pending at
   });
   await auth.createAuthorizationUrl();
 
+  let mismatchError;
   await assert.rejects(
     auth.handleCallback({
       url: "http://127.0.0.1:5173/?code=nope&state=wrong",
     }),
-    (error) =>
-      error instanceof SpotifyAuthError && error.code === "invalid_state",
+    (error) => {
+      mismatchError = error;
+      return error instanceof SpotifyAuthError && error.code === "invalid_state";
+    },
   );
   assert.equal(fetchCount, 0);
+  assert.equal(mismatchError.details.reason, "state_mismatch");
+  assert.equal(mismatchError.details.pendingTransactionCount, 1);
   assert.equal(session.values.size, 1, "the unrelated pending attempt is preserved");
   assert.equal(historyCalls.at(-1).at(-1), "/");
+});
+
+test("SpotifyAuth reports a safe reason when the browser loses the PKCE verifier", async () => {
+  const auth = new SpotifyAuth({
+    clientId: "client-id",
+    redirectUri: "http://127.0.0.1:5173/",
+    fetchImpl: async () => jsonResponse({}),
+    storage: new MemoryStorage(),
+    transactionStorage: new MemoryStorage(),
+    clock: () => 100,
+    cryptoImpl: webcrypto,
+    locationImpl: { origin: "http://127.0.0.1:5173" },
+    historyImpl: { replaceState: () => {} },
+  });
+
+  await assert.rejects(
+    auth.handleCallback({
+      url: "http://127.0.0.1:5173/?code=nope&state=returned-state",
+    }),
+    (error) =>
+      error instanceof SpotifyAuthError &&
+      error.details?.reason === "missing_transaction" &&
+      error.details?.pendingTransactionCount === 0,
+  );
 });
 
 test("token provider refreshes once for concurrent callers and preserves or rotates refresh tokens", async () => {
