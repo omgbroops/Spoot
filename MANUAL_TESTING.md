@@ -23,6 +23,10 @@ These constraints were checked against Spotify's documentation on July 23,
   the Web Playback SDK does not support free accounts or mobile-only Premium
   plans. See the official [Web Playback SDK overview](https://developer.spotify.com/documentation/web-playback-sdk)
   and [SDK reference](https://developer.spotify.com/documentation/web-playback-sdk/reference).
+- Spotify's Web Playback SDK authorization guide currently requires
+  `streaming`, `user-read-private`, and `user-read-email`. Spool never reads or
+  stores the account email; that scope is requested only because the SDK lists
+  it as a browser-player prerequisite.
 - Access tokens normally last one hour. Refresh tokens issued to Developer
   Dashboard apps last six months from the original user authorization, and
   refreshing an access token does not extend that six-month lifetime. An

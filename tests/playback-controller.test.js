@@ -150,6 +150,38 @@ test("controller connects once, hydrates state, and transfers only on user actio
   assert.ok(queueService.refreshCalls >= 2);
 });
 
+test("controller invokes browser timers with the global receiver", async () => {
+  const sdk = new FakeSdk();
+  let intervalReceiver;
+  let clearReceiver;
+  let observedDelay;
+  let clearedTimer;
+  const controller = new PlaybackController({
+    apiClient: createApi(),
+    sdk,
+    queueService: createQueueService(),
+    setIntervalImpl: function (_callback, delay) {
+      intervalReceiver = this;
+      observedDelay = delay;
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+      return 37;
+    },
+    clearIntervalImpl: function (timer) {
+      clearReceiver = this;
+      clearedTimer = timer;
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+    },
+  });
+
+  await controller.connect();
+  assert.equal(intervalReceiver, globalThis);
+  assert.equal(observedDelay, 250);
+
+  await controller.disconnect();
+  assert.equal(clearReceiver, globalThis);
+  assert.equal(clearedTimer, 37);
+});
+
 test("controller routes transport to SDK and confirms API shuffle/repeat state", async () => {
   const sdk = new FakeSdk();
   const api = createApi();

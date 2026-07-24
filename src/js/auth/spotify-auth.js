@@ -427,7 +427,10 @@ export class SpotifyAuth {
       redirect_uri: this.redirectUri,
       code_verifier: verifier,
     });
-    const tokens = mergeSpotifyTokenResponse(payload, {
+    const scopedPayload = payload.scope === undefined && this.scopes.length
+      ? { ...payload, scope: this.scopes.join(" ") }
+      : payload;
+    const tokens = mergeSpotifyTokenResponse(scopedPayload, {
       now: clockNow(this.clock),
       authorizationGrant: true,
       refreshTokenLifetimeMs: this.refreshTokenLifetimeMs,
@@ -439,11 +442,14 @@ export class SpotifyAuth {
     const body = new URLSearchParams(parameters);
     let response;
     try {
-      response = await this.fetch(this.tokenEndpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body,
-      });
+      response = await Reflect.apply(this.fetch, globalThis, [
+        this.tokenEndpoint,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body,
+        },
+      ]);
     } catch (fetchCause) {
       try {
         response = await this.requestTokenWithXhr(body);
@@ -524,6 +530,11 @@ export class SpotifyAuth {
   hasSession() {
     const tokens = this.tokenStore.read();
     return Boolean(tokens?.accessToken || tokens?.refreshToken);
+  }
+
+  hasGrantedScopes(requiredScopes = this.scopes) {
+    const granted = new Set(this.tokenStore.read()?.scopes ?? []);
+    return requiredScopes.every((scope) => granted.has(scope));
   }
 
   async getAccessToken({ forceRefresh = false } = {}) {

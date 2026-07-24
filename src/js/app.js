@@ -7,8 +7,8 @@ import {
   SpotifyAuth,
   SpotifyAuthError,
   shouldReloadOAuthPageAfterBfcacheRestore,
-} from "./auth/spotify-auth.js?v=20260723-oauth10";
-import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-oauth10";
+} from "./auth/spotify-auth.js?v=20260723-oauth11";
+import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-oauth11";
 import { DEFAULT_TOKEN_STORAGE_KEY } from "./auth/token-store.js";
 import { SpotifyApiClient, SpotifyApiError } from "./spotify/api-client.js";
 import { SpotifyPlaybackSdk } from "./spotify/playback-sdk.js";
@@ -181,6 +181,15 @@ async function initialize() {
     return;
   }
 
+  if (!auth.hasGrantedScopes(config.scopes)) {
+    auth.logout();
+    renderLoggedOut();
+    renderConnection("logged-out", {
+      message: "Spotify added a browser-playback permission. Log in once more to approve it.",
+    });
+    return;
+  }
+
   createLiveController();
   renderConnection("logged-in");
   renderSettings();
@@ -307,8 +316,16 @@ function bindController(nextController) {
       renderNowPlaying({ emptyMessage: "No active Spotify playback" });
       renderImmersive({ emptyMessage: "No active Spotify playback" });
     }),
-    nextController.on("error", ({ message, error, operation }) => {
-      console.warn("Spotify operation failed.", safeDiagnostic(error, operation));
+    nextController.on("error", ({ message, error, operation, type }) => {
+      const diagnosticError = error || {
+        name: "SpotifySdkError",
+        code: type,
+        message,
+      };
+      console.warn(
+        "Spotify operation failed.",
+        safeDiagnostic(diagnosticError, operation || type),
+      );
       showToast(message || humanizeError(error));
       if (operation === "refresh-queue") {
         renderQueueUnavailable(message);
@@ -451,6 +468,13 @@ async function handleOAuthCallbackMessage(data, source = null) {
   });
   try {
     await auth.handleCallback({ url: callbackUrl.href, cleanup: false });
+    if (!auth.hasGrantedScopes(config.scopes)) {
+      auth.logout();
+      throw new SpotifyAuthError(
+        "Spotify did not grant every permission required for browser playback.",
+        { code: "insufficient_scope" },
+      );
+    }
     pendingOAuthCallback = undefined;
     completeOAuthOnOriginalTab();
     postOAuthResult(source, { ok: true, state: callbackState });
@@ -551,7 +575,11 @@ function renderOAuthCallbackFailure(error) {
 }
 
 function completeOAuthOnOriginalTab() {
-  if (!auth?.hasSession() || controller) return;
+  if (
+    !auth?.hasSession() ||
+    !auth.hasGrantedScopes(config?.scopes ?? []) ||
+    controller
+  ) return;
   createLiveController();
   renderConnection("logged-in");
   renderSettings();
@@ -815,6 +843,9 @@ function humanizeError(error) {
   }
   if (error instanceof SpotifyAuthError) {
     if (error.code === "access_denied") return "Spotify authorization was denied.";
+    if (error.code === "insufficient_scope") {
+      return "Spotify did not grant every browser-playback permission. Log in and approve all requested access.";
+    }
     if (error.code === "invalid_state") {
       if (error.details?.reason === "missing_transaction") {
         return "Spotify returned, but this tab lost the temporary login verifier. Close other Spool tabs, reload, and try again.";
@@ -853,6 +884,12 @@ function safeDiagnostic(error, operation) {
     transport: error?.details?.transport,
     fetchFailure: error?.details?.fetchFailure,
     xhrFailure: error?.details?.xhrFailure,
+    cause: error?.cause
+      ? {
+          name: error.cause.name || "Error",
+          message: error.cause.message || "Unknown failure.",
+        }
+      : undefined,
     operation,
     message: error?.message,
   };

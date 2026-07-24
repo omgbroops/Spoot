@@ -33,6 +33,21 @@ test("API client handles 204 responses and forwards AbortSignal", async () => {
   assert.match(observed.url, /me\/player\/pause\?device_id=device-1$/u);
 });
 
+test("API client invokes browser fetch with the global receiver", async () => {
+  let observedReceiver;
+  const client = new SpotifyApiClient({
+    tokenProvider: async () => "access",
+    fetchImpl: function () {
+      observedReceiver = this;
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+      return Promise.resolve(jsonResponse({ is_playing: false }));
+    },
+  });
+
+  assert.deepEqual(await client.getPlaybackState(), { is_playing: false });
+  assert.equal(observedReceiver, globalThis);
+});
+
 test("API client retries a 401 exactly once with a forced fresh token", async () => {
   const tokenRequests = [];
   const requests = [];

@@ -1,6 +1,7 @@
 export const REQUIRED_SPOTIFY_SCOPES = Object.freeze([
   "streaming",
   "user-read-private",
+  "user-read-email",
   "user-read-playback-state",
   "user-read-currently-playing",
   "user-modify-playback-state",

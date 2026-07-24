@@ -255,12 +255,15 @@ export class SpotifyApiClient {
 
       let response;
       try {
-        response = await this.fetch(url, {
-          method,
-          headers,
-          body: preparedBody,
-          signal,
-        });
+        response = await Reflect.apply(this.fetch, globalThis, [
+          url,
+          {
+            method,
+            headers,
+            body: preparedBody,
+            signal,
+          },
+        ]);
       } catch (cause) {
         if (signal?.aborted || cause?.name === "AbortError") throw cause;
         throw new SpotifyApiError("Could not reach Spotify.", {

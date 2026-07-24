@@ -192,7 +192,7 @@ export function loadSpotifySdk({
     windowRef.onSpotifyWebPlaybackSDKReady = () => {
       if (typeof priorCallback === "function") {
         try {
-          priorCallback();
+          Reflect.apply(priorCallback, windowRef, []);
         } catch (error) {
           console.warn("Another Spotify SDK callback failed.", error);
         }

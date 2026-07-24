@@ -89,12 +89,16 @@ test("production Date clock preserves fresh OAuth transactions and token session
   const auth = new SpotifyAuth({
     clientId: "client-id",
     redirectUri: "http://127.0.0.1:5173/",
-    fetchImpl: async () => jsonResponse({
-      access_token: "access-token",
-      refresh_token: "refresh-token",
-      token_type: "Bearer",
-      expires_in: 3600,
-    }),
+    scopes: ["streaming", "user-read-email"],
+    fetchImpl: function () {
+      assert.equal(this, globalThis);
+      return Promise.resolve(jsonResponse({
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+        token_type: "Bearer",
+        expires_in: 3600,
+      }));
+    },
     storage: tokenStorage,
     transactionStorage,
     cryptoImpl: webcrypto,
@@ -117,6 +121,8 @@ test("production Date clock preserves fresh OAuth transactions and token session
   assert.equal(result.handled, true);
   assert.equal(result.tokens.accessToken, "access-token");
   assert.equal(auth.hasSession(), true);
+  assert.equal(auth.hasGrantedScopes(), true);
+  assert.deepEqual(result.tokens.scopes, ["streaming", "user-read-email"]);
   assert.equal(transactionStorage.getItem("spool.auth.pkce"), null);
 });
 

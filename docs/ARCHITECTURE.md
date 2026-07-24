@@ -18,7 +18,7 @@ separate demo page or bypass the production UI.
 configuration, chooses live or explicit mock mode, creates one controller, and
 wires it to the UI.
 
-`src/js/config.js` owns the five requested Spotify scopes and validates the
+`src/js/config.js` owns the six requested Spotify scopes and validates the
 development origin. Live mode dynamically imports `config.local.js`, falling
 back to `config.example.js` only to show an unconfigured state. Mock mode is
 selected only when the URL contains `mock=1`; the optional `scenario` parameter

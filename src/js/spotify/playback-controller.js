@@ -366,15 +366,18 @@ export class PlaybackController extends Emitter {
 
   #startProgressLoop() {
     if (this.#progressTimer || typeof this.#setInterval !== "function") return;
-    this.#progressTimer = this.#setInterval(() => {
-      if (!this.playbackState?.isPlaying) return;
-      this.emit("progress", interpolateProgress(this.playbackState, this.#now()));
-    }, 250);
+    this.#progressTimer = Reflect.apply(this.#setInterval, globalThis, [
+      () => {
+        if (!this.playbackState?.isPlaying) return;
+        this.emit("progress", interpolateProgress(this.playbackState, this.#now()));
+      },
+      250,
+    ]);
   }
 
   #stopProgressLoop() {
     if (!this.#progressTimer) return;
-    this.#clearInterval(this.#progressTimer);
+    Reflect.apply(this.#clearInterval, globalThis, [this.#progressTimer]);
     this.#progressTimer = null;
   }
 

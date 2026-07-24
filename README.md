@@ -48,6 +48,9 @@ Spool's live player requires Spotify Premium. Development Mode also requires
 the app owner to have Premium and limits the app to five allowlisted users; see
 Spotify's current [Development Mode rules](https://developer.spotify.com/documentation/web-api/concepts/quota-modes)
 and [Web Playback SDK requirements](https://developer.spotify.com/documentation/web-playback-sdk).
+The SDK currently requires `streaming`, `user-read-private`, and
+`user-read-email`; Spool requests the email scope for SDK authorization but
+does not read, display, or store the account's email address.
 
 1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
 2. Register this exact redirect URI: `http://127.0.0.1:5173/`

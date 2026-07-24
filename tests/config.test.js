@@ -20,6 +20,7 @@ test("configuration uses the exact loopback redirect and requested scopes", () =
   assert.deepEqual(REQUIRED_SPOTIFY_SCOPES, [
     "streaming",
     "user-read-private",
+    "user-read-email",
     "user-read-playback-state",
     "user-read-currently-playing",
     "user-modify-playback-state",
