@@ -1,0 +1,105 @@
+# Spool
+
+Spool is a personal, non-commercial Spotify player for people who want the
+music without the feed. It turns the browser into a Spotify Connect device and
+keeps the original player's monochrome liquid-glass interface: floating Now
+Playing and queue widgets, compact transport controls, and an immersive view.
+
+The app is plain HTML, CSS, and JavaScript. It has no framework, build step,
+backend, or Spotify Client Secret.
+
+## What works
+
+- Spotify Authorization Code with PKCE and session restoration
+- a Web Playback SDK device named `Spool`
+- user-triggered playback transfer into the browser
+- play/pause, previous/next, seeking, shuffle, and repeat
+- normalized Spotify playback state, artwork, progress, and queue rendering
+- draggable widget positions and responsive immersive mode
+- an explicit mock adapter that exercises the same controller and UI boundary
+
+## Try the interface without Spotify
+
+From the repository root, start the static server on Windows:
+
+```powershell
+python -m http.server 5173 --bind 127.0.0.1
+```
+
+Open [http://127.0.0.1:5173/?mock=1](http://127.0.0.1:5173/?mock=1).
+Mock mode requires `mock=1`; it is never selected during an ordinary live
+startup.
+
+Use `scenario` to inspect specific states:
+
+| Scenario | URL suffix | Expected state |
+| --- | --- | --- |
+| Default | `?mock=1` or `?mock=1&scenario=default` | ready device, playing track, queue, and moving progress |
+| Paused | `?mock=1&scenario=paused` | paused track |
+| Empty queue | `?mock=1&scenario=empty-queue` | current item with no upcoming items |
+| Authorization error | `?mock=1&scenario=auth-error` | actionable sign-in failure |
+| SDK error | `?mock=1&scenario=sdk-error` | actionable player initialization failure |
+| Rate limit | `?mock=1&scenario=rate-limit` | simulated Spotify throttling error |
+| Null state | `?mock=1&scenario=null` | connected device with no current playback state |
+
+## Connect Spotify
+
+Spool's live player requires Spotify Premium. Development Mode also requires
+the app owner to have Premium and limits the app to five allowlisted users; see
+Spotify's current [Development Mode rules](https://developer.spotify.com/documentation/web-api/concepts/quota-modes)
+and [Web Playback SDK requirements](https://developer.spotify.com/documentation/web-playback-sdk).
+
+1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
+2. Register this exact redirect URI: `http://127.0.0.1:5173/`
+3. Copy the example configuration:
+
+   ```powershell
+   Copy-Item .\src\js\config.example.js .\src\js\config.local.js
+   ```
+
+4. Replace `YOUR_SPOTIFY_CLIENT_ID` in `config.local.js` with the app's Client
+   ID. A Client ID identifies a public browser app; it is not a secret. Do not
+   add a Client Secret anywhere in Spool.
+5. Start the server:
+
+   ```powershell
+   python -m http.server 5173 --bind 127.0.0.1
+   ```
+
+6. Open [http://127.0.0.1:5173/](http://127.0.0.1:5173/), choose **Log in**,
+   then choose **Connect player** after the callback. When Spool reports that
+   the device is ready, choose **Use Spool**. If the browser blocks autoplay,
+   press play once to unlock audio.
+
+Do not use `localhost`, a different port, or `file://`; Spotify compares the
+redirect URI exactly. The complete authenticated procedure is in
+[MANUAL_TESTING.md](./MANUAL_TESTING.md).
+
+## Tests
+
+Tests use Node's built-in runner and install no runtime dependencies. Node 20+
+is required.
+
+```powershell
+npm test
+```
+
+`npm run check` also performs the configured JavaScript entry-point syntax
+check.
+
+## Scope
+
+This release is intentionally a focused playback client. Lyrics, local-file and
+Dropbox import, library/search/discovery, playlist editing, recommendations,
+statistics, sleep timer, full queue editing, and the preserved Sound controls
+are not connected. Those surfaces remain visible and clearly inactive; they do
+not report fake success or control a hidden local audio engine.
+
+The original local player is preserved, unchanged, under [`reference/`](./reference/README.md).
+See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for runtime boundaries and
+[`src/js/legacy/README.md`](./src/js/legacy/README.md) for the legacy feature
+policy.
+
+Live Spotify login and playback require the repository owner's own credentials
+and Premium account. Automated and mock checks do not claim to verify that live
+path.

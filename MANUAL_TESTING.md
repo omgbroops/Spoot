@@ -1,0 +1,252 @@
+# Authenticated Spotify manual test
+
+This is the final live-account check for Spool. The automated suite covers the
+PKCE helpers, token and API edge cases, state normalization, mock controller,
+UI plumbing, and the guard against starting the legacy audio engine. It cannot
+prove that a real Spotify account can authorize, that Spotify will provision a
+Web Playback SDK device, or that protected audio will play in your browser.
+
+No live Spotify login or playback is claimed to have been tested by the
+repository's automated checks. Perform the 19 steps below with your own account.
+
+## Before you begin: current Spotify limits
+
+These constraints were checked against Spotify's documentation on July 23,
+2026 and can change:
+
+- The owner of a Development Mode app must have an active Spotify Premium
+  subscription. A Development Mode app supports up to five authenticated users,
+  and each user must be added to the app's allowlist. An unallowlisted user may
+  appear to log in but their API calls return `403`. Spotify documents this in
+  [Quota modes](https://developer.spotify.com/documentation/web-api/concepts/quota-modes).
+- The account actually using Spool must have a Spotify Premium subscription;
+  the Web Playback SDK does not support free accounts or mobile-only Premium
+  plans. See the official [Web Playback SDK overview](https://developer.spotify.com/documentation/web-playback-sdk)
+  and [SDK reference](https://developer.spotify.com/documentation/web-playback-sdk/reference).
+- Access tokens normally last one hour. Refresh tokens issued to Developer
+  Dashboard apps last six months from the original user authorization, and
+  refreshing an access token does not extend that six-month lifetime. An
+  expired or rejected refresh token requires a new sign-in. See Spotify's
+  [refresh-token guide](https://developer.spotify.com/documentation/web-api/tutorials/refreshing-tokens).
+- Spotify permits HTTP only for an explicit loopback IP during local
+  development. `http://localhost` is not accepted. See
+  [Redirect URIs](https://developer.spotify.com/documentation/web-api/concepts/redirect_uri).
+
+Use a current Chrome, Edge, Firefox, or Safari release with protected-content
+playback enabled. The Spotify SDK may fail when Encrypted Media Extensions
+(EME), autoplay, or required iframe permissions are blocked. Privacy,
+anti-tracking, script-blocking, and third-party-content extensions can also
+prevent the SDK from loading. Spotify lists these browser issues in its
+[Web Playback SDK troubleshooting notes](https://developer.spotify.com/documentation/web-playback-sdk).
+
+## The 19-step check
+
+### 1. Create or configure the Spotify Developer app
+
+Open the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard),
+create or select the app, and confirm its owner has Premium. Under **Users
+Management**, add the Spotify name and email for every account that will test
+Spool; Development Mode permits at most five authenticated users. The playback
+account itself must also be Premium.
+
+### 2. Register the redirect URI
+
+In the app settings, add and save exactly:
+
+```text
+http://127.0.0.1:5173/
+```
+
+The scheme, explicit IP, port, path, and trailing slash must match. Do not
+substitute `localhost`.
+
+### 3. Add the Client ID locally
+
+From the repository root in PowerShell:
+
+```powershell
+Copy-Item .\src\js\config.example.js .\src\js\config.local.js
+```
+
+Open `src/js/config.local.js` and replace only
+`YOUR_SPOTIFY_CLIENT_ID`. Leave the redirect URI as
+`http://127.0.0.1:5173/` and the device name as `Spool` unless you intentionally
+need a different display name. Never paste a Spotify Client Secret into this
+browser app. `config.local.js` is ignored by Git.
+
+### 4. Start the static server
+
+Run the exact Windows command from the repository root:
+
+```powershell
+python -m http.server 5173 --bind 127.0.0.1
+```
+
+Keep the terminal open for the rest of the test. A successful request should be
+visible in its access log.
+
+### 5. Open the correct loopback address
+
+Navigate directly to [http://127.0.0.1:5173/](http://127.0.0.1:5173/).
+Do not open `index.html` through `file://`, do not use `localhost`, and do not
+include `mock=1`. Confirm that setup/login remains visible rather than leaving
+you on a blank player.
+
+### 6. Log in
+
+Choose **Log in**, authenticate with an allowlisted Premium account, and
+approve the requested scopes. After Spotify redirects back:
+
+- the page should return to the exact loopback URL;
+- `code`, `state`, and other OAuth callback parameters should disappear from
+  the address bar;
+- the UI should report **Spotify connected** and present **Connect player**;
+- no access or refresh token should be printed in the console or URL.
+
+If you deny access, Spool should show a readable denial and allow a fresh login.
+
+### 7. Connect the Web Playback SDK
+
+Choose **Connect player** in the connection banner and wait for Spool to report
+a ready player/device. In another Spotify client, open the device picker and
+confirm that **Spool** appears. Initialization, account, authentication, and
+playback failures should be shown as actionable errors rather than leaving the
+page blank.
+
+### 8. Transfer playback into Spool
+
+Choose **Use Spool**. The status should move through transfer and then active
+states without repeatedly transferring in a loop. If playback arrives paused or
+the browser reports an autoplay failure, click or press play once in Spool; that
+user gesture unlocks protected browser audio. Spotify explicitly recommends
+activating the SDK element from a user interaction in its
+[SDK player reference](https://developer.spotify.com/documentation/web-playback-sdk/reference#api-spotify-player-activateelement).
+
+### 9. Start a track elsewhere if needed
+
+If Spotify reports no current player state, start an ordinary track in the
+Spotify desktop, mobile, or web app, then select **Spool** again. Confirm the
+main artwork, title, artists, duration, ambient background, and document title
+reconcile to that track. A temporary null state should show an empty/recoverable
+state, not crash the UI.
+
+### 10. Test play and pause
+
+Use the main play/pause button several times. Confirm the icon, accessible
+label, status, and progress agree with audible playback. While paused, progress
+must stop; after resuming it should continue without calling Spotify every
+animation frame. The spacebar shortcut should operate the same controller when
+focus is not inside an input.
+
+### 11. Test previous and next
+
+Use both transport buttons and the Shift+Left/Shift+Right shortcuts. Confirm
+that metadata, artwork, duration, background, document title, and queue update
+after each confirmed Spotify track change. Restrictions or command rejection
+must produce a readable message rather than a fake local change.
+
+### 12. Test seeking
+
+Click or drag the main seek bar to an interior position, then use Left/Right to
+move by five seconds. Confirm Spotify playback and the displayed current time
+reconcile. Repeat near the beginning and end to verify clamping. A restricted or
+non-seekable item should remain stable and report the rejection.
+
+### 13. Test shuffle
+
+Toggle shuffle from the main player. Confirm its pressed/active state changes
+only after the Spotify command succeeds and remains correct after the next
+authoritative state refresh.
+
+### 14. Test repeat
+
+Press repeat three times and verify the order `off` -> `context` -> `track` ->
+`off`. The title/label and visual state should match Spotify after each command.
+
+### 15. Test queue rendering
+
+Open **Up Next** (or press Q). Confirm it renders a **Now Playing** row and the
+upcoming Spotify items with artwork, title, artist/show names, and sensible
+track/episode handling. Skip a track and verify the queue refreshes. An empty
+Spotify queue should show an honest empty state. **Clear**, remove, and drag to
+reorder must remain inactive; Spool must not simulate queue edits Spotify has
+not confirmed.
+
+### 16. Test immersive mode
+
+Open immersive mode with its button or F. Confirm its artwork, title, artists,
+progress, play/pause, previous/next, seek, shuffle, and repeat remain synchronized
+with the main player. Test a narrow viewport. The lyrics area may remain visible
+but must say that lyrics are not connected. Collapse with the on-screen control
+and with Escape.
+
+### 17. Reload and verify restoration/refresh
+
+Reload [http://127.0.0.1:5173/](http://127.0.0.1:5173/). The authenticated
+session should restore as **Spotify connected** without another authorization
+prompt while the stored grant remains valid. Choose **Connect player** again;
+the SDK should recreate one Spool device and state/queue should hydrate. Leaving
+the app open across an access-token expiry should refresh once rather than
+racing duplicate refreshes. Do not copy token values out of browser storage to
+perform this check. At the six-month refresh-token boundary, a clean request to
+sign in again is expected behavior.
+
+### 18. Log out and verify credentials are cleared
+
+Choose **Log out**. The SDK device should disconnect, playback data should clear,
+and login/setup should become visible. In browser developer tools, inspect
+storage by key name only and confirm `spool.auth.tokens` is absent; do not expose
+or paste any prior token value. Reload and verify Spool stays logged out.
+
+### 19. Verify inactive legacy controls cannot alter playback
+
+While a track is playing, open Sound and interact with any controls the browser
+allows; try Library, Import/Dropbox, lyrics editing, statistics, playlist
+editing, Clear Queue, and queue-item editing. Each surface must remain disabled
+or explain that it is not connected. Spotify playback, volume, speed, effects,
+queue, and position must not change. There must be no second local
+`HTMLAudioElement`, Web Audio graph, or legacy `musicplayer` database competing
+with the Spotify SDK.
+
+## Interpreting common failures
+
+### `403 Forbidden`
+
+First verify that the app owner still has Premium, the testing user is on the
+Development Mode allowlist, the testing user has a compatible Premium plan, and
+the authorization granted all requested scopes. Development Mode explicitly
+returns `403` for an unallowlisted user's API calls even if login appeared to
+succeed; see [Quota modes](https://developer.spotify.com/documentation/web-api/concepts/quota-modes).
+A `403` can also represent an account, content, market, device, or playback
+restriction, so preserve the Spotify error message when reporting it.
+
+### `429 Too Many Requests`
+
+Do not repeatedly click controls or reload. For ordinary rate limiting, wait for
+the number of seconds in Spotify's `Retry-After` response header; Spotify
+documents the rolling-window behavior in [Rate limits](https://developer.spotify.com/documentation/web-api/concepts/rate-limits).
+Development Mode can also return `429` with reason `QUOTA_EXCEEDED`; treat that
+as a quota condition, not permission to create a tight retry loop. As of July
+23, 2026, Spotify counts Development Mode quota across the apps owned by the
+same developer account; see Spotify's [Web API quota update](https://developer.spotify.com/blog/2026-07-23-web-api-quota-updates).
+Capture the status, safe error reason, action attempted, and approximate time,
+but never a Bearer token.
+
+### SDK is absent, not ready, or silent
+
+- Confirm the browser supports EME/protected content and that Spotify playback
+  is allowed.
+- Allow autoplay after a direct user gesture; press play once after transfer.
+- If Spool is embedded cross-origin, the iframe must allow `encrypted-media`
+  and `autoplay`.
+- Temporarily disable privacy, anti-tracking, script-blocking, or third-party
+  content extensions and retry in a clean browser profile.
+- Check that the Spotify SDK script and Spotify API requests were not blocked by
+  the network, DNS filter, VPN, or browser policy.
+
+### Redirect or authorization loops
+
+Confirm the dashboard, `config.local.js`, address bar, and server all use exactly
+`http://127.0.0.1:5173/`. Clear Spool through its Log out action and begin again.
+Do not share screenshots or logs that contain OAuth callback codes, token
+values, or authorization parameters.
