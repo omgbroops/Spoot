@@ -8,6 +8,10 @@ export function inactiveFeatureMessage(feature) {
   return `${name} ${DEFAULT_SUFFIX}`;
 }
 
+function messageFor(element, feature) {
+  return element?.dataset?.inactiveMessage || inactiveFeatureMessage(feature);
+}
+
 export function explainInactiveFeature(feature) {
   const message = inactiveFeatureMessage(feature);
   showToast(message);
@@ -20,7 +24,7 @@ export function markInactive(element, feature) {
   element.dataset.inactiveFeature = name;
   element.classList.add('inactive-control');
   element.setAttribute('aria-disabled', 'true');
-  element.title = inactiveFeatureMessage(name);
+  element.title = messageFor(element, name);
   return element;
 }
 
@@ -31,7 +35,7 @@ export function setupInactiveFeatures(root = document) {
   inactive.forEach((element) => {
     const feature = element.dataset.inactiveFeature || 'This feature';
     element.setAttribute('aria-disabled', 'true');
-    if (!element.title) element.title = inactiveFeatureMessage(feature);
+    if (!element.title) element.title = messageFor(element, feature);
   });
 
   const activate = (event) => {
@@ -41,7 +45,7 @@ export function setupInactiveFeatures(root = document) {
     if (!target || !root.contains(target)) return;
     event.preventDefault();
     event.stopPropagation();
-    explainInactiveFeature(target.dataset.inactiveFeature);
+    showToast(messageFor(target, target.dataset.inactiveFeature));
   };
 
   const onKeyDown = (event) => {

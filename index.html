@@ -130,6 +130,14 @@
     </div>
   </section>
 
+  <section class="modal glass" id="modal-album" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="album-title">
+    <div class="modal-head" data-drag-handle>
+      <div class="modal-title" id="album-title"><button class="library-back" id="album-back" type="button" aria-label="Back to Search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m15 18-6-6 6-6"/></svg></button><span>Album</span></div>
+      <button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal-body album-body" id="album-content"><div class="empty">Choose an album from Search.</div></div>
+  </section>
+
   <section class="modal glass" id="modal-library" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="lib-title">
     <div class="modal-head" data-drag-handle>
       <div class="modal-title" id="lib-title"><button class="library-back" id="library-back" type="button" aria-label="Back to Library" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m15 18-6-6 6-6"/></svg></button><span>Library</span></div>
@@ -142,12 +150,12 @@
     <div class="modal-head" data-drag-handle><div class="modal-title" id="sound-title">Sound</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="modal-body">
       <div class="setting volume-setting"><div class="setting-label">Spool volume <span class="val" id="vol-val">100%</span></div><input type="range" id="vol-range" min="0" max="1" step="0.01" value="1" disabled></div>
-      <div class="setting inactive-surface inactive-control" data-inactive-feature="Playback speed"><div class="setting-label">Speed <span class="val" id="speed-val">1.00×</span></div><input type="range" id="speed-range" min="0.25" max="2.5" step="0.01" value="1" disabled></div>
-      <div class="setting inactive-surface inactive-control" data-inactive-feature="Reverb"><div class="setting-label">Reverb <span class="val" id="rev-val">0%</span></div><input type="range" id="rev-range" min="0" max="1" step="0.01" value="0" disabled></div>
-      <div class="row-setting inactive-surface inactive-control" data-inactive-feature="Crossfade"><div class="name">Crossfade <span class="val" id="cf-val">6s</span></div><div class="toggle" id="tg-cf" aria-hidden="true"></div></div>
+      <div class="setting inactive-surface inactive-control" data-inactive-feature="Playback speed" data-inactive-message="Disabled."><div class="setting-label">Speed <span class="val">Unavailable</span></div><input type="range" id="speed-range" min="0.25" max="2.5" step="0.01" value="1" disabled></div>
+      <div class="setting inactive-surface inactive-control" data-inactive-feature="Reverb" data-inactive-message="Disabled."><div class="setting-label">Reverb <span class="val">Unavailable</span></div><input type="range" id="rev-range" min="0" max="1" step="0.01" value="0" disabled></div>
+      <div class="row-setting inactive-surface inactive-control" data-inactive-feature="Crossfade" data-inactive-message="Disabled."><div class="name">Crossfade</div><span class="val">Unavailable</span></div>
       <div class="setting sound-subsetting inactive-surface"><input type="range" id="cf-range" min="0" max="12" step="1" value="6" disabled></div>
-      <div class="row-setting inactive-surface inactive-control" data-inactive-feature="Gapless playback"><div class="name">Gapless playback</div><div class="toggle" id="tg-gapless" aria-hidden="true"></div></div>
-      <div class="setting eq-setting inactive-surface inactive-control" data-inactive-feature="Equalizer"><div class="setting-label">Equalizer <div class="toggle on" id="tg-eq" aria-hidden="true"></div></div><div class="eq-presets" id="eq-presets"><button class="chip active" type="button" disabled>Flat</button><button class="chip" type="button" disabled>Bass Boost</button><button class="chip" type="button" disabled>Vocal</button><button class="chip" type="button" disabled>Treble</button><button class="chip" type="button" disabled>Lo-Fi</button><button class="chip" type="button" disabled>Podcast</button></div><div class="eq-wrap" id="eq-wrap">
+      <div class="row-setting inactive-surface inactive-control" data-inactive-feature="Gapless playback" data-inactive-message="Disabled."><div class="name">Gapless playback</div><span class="val">Unavailable</span></div>
+      <div class="setting eq-setting inactive-surface inactive-control" data-inactive-feature="Equalizer" data-inactive-message="Disabled."><div class="setting-label">Equalizer <span class="val">Unavailable</span></div><div class="eq-presets" id="eq-presets"><button class="chip active" type="button" disabled>Flat</button><button class="chip" type="button" disabled>Bass Boost</button><button class="chip" type="button" disabled>Vocal</button><button class="chip" type="button" disabled>Treble</button><button class="chip" type="button" disabled>Lo-Fi</button><button class="chip" type="button" disabled>Podcast</button></div><div class="eq-wrap" id="eq-wrap">
         <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">60</span></label>
         <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">150</span></label>
         <label class="eq-band"><input class="eq-slider" type="range" min="-12" max="12" value="0" disabled><span class="eq-freq">400</span></label>
@@ -177,7 +185,7 @@
         <div class="row-setting"><div><div class="name">Headphone click → skip</div><div class="setting-note">Enable previous and next media-key actions</div></div><button class="toggle" id="tg-clickskip" type="button" role="switch" aria-checked="false" aria-label="Headphone click skips tracks"></button></div>
       </div>
       <div class="legacy-settings inactive-surface" data-inactive-feature="Legacy player settings" title="These settings are preserved but not connected to Spotify in this pass">
-        <div class="row-setting"><div class="name">Ambient audio reaction</div><div class="toggle" id="tg-viz" aria-hidden="true"></div></div>
+        <div class="row-setting" data-inactive-feature="Ambient audio reaction" data-inactive-message="Spotify does not expose analyser data for its encrypted browser stream."><div class="name">Ambient audio reaction</div><span class="val">Unavailable</span></div>
         <div class="row-setting"><div class="name">Sleep timer</div><span class="val">Off</span></div>
         <div class="row-setting"><div class="name">Dropbox</div><span class="val">Not connected</span></div>
         <div class="row-setting"><div class="name">Listening stats</div><button class="btn" id="btn-stats" type="button" disabled>View</button></div>
@@ -244,6 +252,6 @@
 
   <div id="blank" aria-hidden="true"></div>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./src/js/app.js?v=20260724-catalog1"></script>
+  <script type="module" src="./src/js/app.js?v=20260724-albums1"></script>
 </body>
 </html>

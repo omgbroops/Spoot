@@ -380,6 +380,26 @@ export class SpotifyApiClient {
     });
   }
 
+  getAlbum(albumId, { market, signal } = {}) {
+    return this.request(`albums/${assertSpotifyId(albumId, "Album")}`, {
+      query: { market },
+      signal,
+    });
+  }
+
+  getAlbumTracks(albumId, { limit = 50, offset = 0, market, signal } = {}) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+      throw new RangeError("Spotify album track limit must be between 1 and 50.");
+    }
+    if (!Number.isInteger(offset) || offset < 0) {
+      throw new RangeError("Spotify album track offset must be non-negative.");
+    }
+    return this.request(`albums/${assertSpotifyId(albumId, "Album")}/tracks`, {
+      query: { limit, offset, market },
+      signal,
+    });
+  }
+
   search(
     query,
     {

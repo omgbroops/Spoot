@@ -10,6 +10,7 @@ import {
 import {
   SpotifyQueueService,
   normalizeQueueResponse,
+  trimRepeatedQueueCycles,
 } from "../src/js/spotify/queue-service.js";
 
 const track = {
@@ -21,6 +22,8 @@ const track = {
   explicit: false,
   artists: [{ id: "artist-1", name: "Aster", uri: "spotify:artist:artist-1" }],
   album: {
+    id: "album-1",
+    uri: "spotify:album:album-1",
     name: "Quiet Machines",
     images: [{ url: "https://i.scdn.co/image/cover-track" }],
   },
@@ -75,6 +78,7 @@ test("API playback normalization preserves metadata, device state, and restricti
   assert.equal(state.title, "Glass Signal");
   assert.deepEqual(state.artistNames, ["Aster"]);
   assert.equal(state.albumName, "Quiet Machines");
+  assert.equal(state.item.albumUri, "spotify:album:album-1");
   assert.equal(state.artworkUrl, "https://i.scdn.co/image/cover-track");
   assert.equal(state.isPlaying, true);
   assert.equal(state.paused, false);
@@ -131,6 +135,25 @@ test("queue normalization handles a null current item plus track and episode row
   assert.equal(queue.upcoming[1].type, "episode");
   assert.equal(queue.upcoming[1].artist, "Spool Radio");
   assert.equal(queue.receivedAt, 20);
+});
+
+test("queue display trims confirmed repeated context cycles but preserves ordinary duplicates", () => {
+  const item = (id) => ({ id, uri: `spotify:track:${id}`, type: "track" });
+  const remainingThenLoop = [item("b"), item("c"), item("a"), item("b"), item("c")];
+  assert.deepEqual(
+    trimRepeatedQueueCycles(remainingThenLoop, "spotify:track:a").map((entry) => entry.id),
+    ["b", "c"],
+  );
+  assert.deepEqual(
+    trimRepeatedQueueCycles([
+      item("a"), item("b"), item("c"), item("a"), item("b"), item("c"),
+    ]).map((entry) => entry.id),
+    ["a", "b", "c"],
+  );
+  assert.deepEqual(
+    trimRepeatedQueueCycles([item("a"), item("a"), item("b")]).map((entry) => entry.id),
+    ["a", "a", "b"],
+  );
 });
 
 test("queue service deduplicates refresh and refreshes after a successful add", async () => {

@@ -36,18 +36,22 @@ export function normalizeSearchResponse(payload) {
       : null;
   }).filter(Boolean);
 
-  const albums = (payload?.albums?.items ?? []).filter(Boolean).map((album, index) => ({
-    id: album.id || `album-${index}`,
-    type: "album",
-    title: album.name || "Untitled album",
-    subtitle: [artistNames(album) || "Unknown artist", Number.isFinite(album.total_tracks)
-      ? `${album.total_tracks} track${album.total_tracks === 1 ? "" : "s"}`
-      : null].filter(Boolean).join(" · "),
-    artworkUrl: firstImage(album.images),
-    contextUri: album.uri ?? null,
-    externalUrl: externalUrl(album),
-    playable: Boolean(album.uri),
-  }));
+  const albums = (payload?.albums?.items ?? []).filter(Boolean).map((album, index) => {
+    const browseable = typeof album.id === "string" && Boolean(album.id);
+    return {
+      id: album.id || `album-unavailable-${index}`,
+      type: "album",
+      title: album.name || "Untitled album",
+      subtitle: [artistNames(album) || "Unknown artist", Number.isFinite(album.total_tracks)
+        ? `${album.total_tracks} track${album.total_tracks === 1 ? "" : "s"}`
+        : null].filter(Boolean).join(" · "),
+      artworkUrl: firstImage(album.images),
+      contextUri: album.uri ?? null,
+      externalUrl: externalUrl(album),
+      playable: Boolean(album.uri),
+      browseable,
+    };
+  });
 
   const artists = (payload?.artists?.items ?? []).filter(Boolean).map((artist, index) => ({
     id: artist.id || `artist-${index}`,

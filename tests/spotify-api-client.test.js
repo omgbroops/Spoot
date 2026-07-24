@@ -220,7 +220,7 @@ test("focused playback and queue methods use documented methods, bodies, and que
   );
 });
 
-test("library and device methods use current Spotify endpoints and pagination parameters", async () => {
+test("library, album, and device methods use current Spotify endpoints and pagination parameters", async () => {
   const requests = [];
   const client = new SpotifyApiClient({
     tokenProvider: async () => "access",
@@ -234,6 +234,8 @@ test("library and device methods use current Spotify endpoints and pagination pa
   await client.getCurrentUserPlaylists({ limit: 50, offset: 100 });
   await client.getPlaylistItems("AbC123", { limit: 25, offset: 50 });
   await client.getSavedTracks({ limit: 10, offset: 20, market: "US" });
+  await client.getAlbum("Album123", { market: "US" });
+  await client.getAlbumTracks("Album123", { limit: 25, offset: 50, market: "US" });
   await client.getAvailableDevices();
   await client.setPlaybackVolume(34.6, { deviceId: "spool-device" });
 
@@ -245,9 +247,14 @@ test("library and device methods use current Spotify endpoints and pagination pa
   assert.equal(requests[2].url.searchParams.get("additional_types"), "track,episode");
   assert.equal(requests[3].url.pathname, "/v1/me/tracks");
   assert.equal(requests[3].url.searchParams.get("market"), "US");
-  assert.equal(requests[4].url.pathname, "/v1/me/player/devices");
-  assert.equal(requests[5].options.method, "PUT");
-  assert.equal(requests[5].url.searchParams.get("volume_percent"), "35");
+  assert.equal(requests[4].url.pathname, "/v1/albums/Album123");
+  assert.equal(requests[4].url.searchParams.get("market"), "US");
+  assert.equal(requests[5].url.pathname, "/v1/albums/Album123/tracks");
+  assert.equal(requests[5].url.searchParams.get("limit"), "25");
+  assert.equal(requests[5].url.searchParams.get("offset"), "50");
+  assert.equal(requests[6].url.pathname, "/v1/me/player/devices");
+  assert.equal(requests[7].options.method, "PUT");
+  assert.equal(requests[7].url.searchParams.get("volume_percent"), "35");
 });
 
 test("search and contextual playback use Spotify's documented request shapes", async () => {

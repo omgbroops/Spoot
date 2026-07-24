@@ -87,6 +87,12 @@ export function normalizePlaybackItem(item) {
   const type = item.type || (item.show ? "episode" : "track");
   const albumName =
     type === "episode" ? item.show?.name ?? null : item.album?.name ?? null;
+  const albumId = type === "track" && typeof item.album?.id === "string"
+    ? item.album.id
+    : null;
+  const albumUri = type === "track" && typeof item.album?.uri === "string"
+    ? item.album.uri
+    : null;
 
   return {
     id: typeof item.id === "string" ? item.id : null,
@@ -97,6 +103,8 @@ export function normalizePlaybackItem(item) {
     artistNames: artists.map((artist) => artist.name),
     artist: artists.map((artist) => artist.name).join(", "),
     albumName,
+    albumId,
+    albumUri,
     artworkUrl: firstArtworkUrl(item),
     durationMs: nonNegativeNumber(item.duration_ms),
     explicit: Boolean(item.explicit),

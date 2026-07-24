@@ -34,8 +34,18 @@ test("search normalization keeps playable catalog contexts and unavailable playl
   assert.equal(results.tracks[0].playable, true);
   assert.equal(results.artists[0].contextUri, "spotify:artist:artist-1");
   assert.match(results.albums[0].subtitle, /9 tracks/u);
+  assert.equal(results.albums[0].browseable, true);
   assert.equal(results.playlists[0].playable, false);
   assert.equal(results.playlists[1].playable, true);
+});
+
+test("albums without a real Spotify ID remain visible but cannot open a fake page", () => {
+  const results = normalizeSearchResponse({
+    albums: { items: [{ name: "Metadata only", uri: null, artists: [] }] },
+  });
+  assert.equal(results.albums.length, 1);
+  assert.equal(results.albums[0].browseable, false);
+  assert.match(results.albums[0].id, /^album-unavailable-/u);
 });
 
 test("search service requests all supported Spool result groups with the current limit", async () => {

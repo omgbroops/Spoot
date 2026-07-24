@@ -78,7 +78,7 @@ test("SDK wrapper shares the token provider and exposes one ready device", async
   player.options.getOAuthToken((token) => {
     deliveredToken = token;
   });
-  await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(deliveredToken, "test-access-token");
 
   player.emit("ready", { device_id: "device-123" });
@@ -106,6 +106,53 @@ test("SDK wrapper shares the token provider and exposes one ready device", async
 
   wrapper.disconnect();
   assert.equal(wrapper.ready, false);
+});
+
+test("SDK wrapper refreshes every token request after the first", async () => {
+  const requests = [];
+  const delivered = [];
+  const wrapper = new SpotifyPlaybackSdk({
+    tokenProvider: {
+      async getAccessToken({ forceRefresh = false } = {}) {
+        requests.push(forceRefresh);
+        return forceRefresh ? `fresh-token-${requests.length}` : "initial-token";
+      },
+    },
+    windowRef: { Spotify: { Player: FakePlayer } },
+    documentRef: {},
+  });
+
+  await wrapper.connect();
+  const player = FakePlayer.latest;
+  player.options.getOAuthToken((token) => delivered.push(token));
+  player.options.getOAuthToken((token) => delivered.push(token));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(requests, [false, true]);
+  assert.deepEqual(delivered, ["initial-token", "fresh-token-2"]);
+  wrapper.disconnect();
+});
+
+test("SDK wrapper never hands Spotify the same token twice", async () => {
+  const delivered = [];
+  const errors = [];
+  const wrapper = new SpotifyPlaybackSdk({
+    tokenProvider: { getAccessToken: async () => "unchanged-token" },
+    windowRef: { Spotify: { Player: FakePlayer } },
+    documentRef: {},
+  });
+  wrapper.on("error", (event) => errors.push(event));
+
+  await wrapper.connect();
+  const player = FakePlayer.latest;
+  player.options.getOAuthToken((token) => delivered.push(token));
+  player.options.getOAuthToken((token) => delivered.push(token));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(delivered, ["unchanged-token"]);
+  assert.equal(errors.at(-1).type, "authentication_error");
+  assert.match(errors.at(-1).error.message, /fresh access token/u);
+  wrapper.disconnect();
 });
 
 test("SDK wrapper reconnects the same player after a not-ready event", async () => {

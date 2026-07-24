@@ -85,17 +85,16 @@ rows remain visible but cannot dispatch browser playback.
 playlist groups into one small renderer contract. Track results retain their
 album context; other playable results carry their own context URI.
 
-`lyrics/lyrics-service.js` is a separate, read-only metadata boundary adapted
-from BetterLyrics' provider strategy. It tries synchronized SpicyLyrics data,
-Spotify color-lyrics data, and LRCLIB before falling back to static lyrics. Its
-only authority is the existing short-lived Spotify access token; the Spotify
-color-lyrics request and SpicyLyrics' required `SpicyLyrics-WebAuth` header use
-that access token, while LRCLIB receives no Spotify credential. The refresh
-token never leaves the token provider and diagnostics never include either
-token. Because Spool remains a static browser app, each provider must permit
-the browser request directly. There is intentionally no Spotify
-Desktop/Spicetify companion bridge, loopback lyrics service, or desktop
-credential extraction.
+`spotify/album-service.js` hydrates an album and follows every track page. It
+keeps the album context plus each track's absolute position so selecting a row
+repositions the context instead of replacing it with a one-song queue.
+
+`lyrics/lyrics-service.js` is a separate, read-only metadata boundary. It makes
+plain, header-free GET requests directly to LRCLIB, preferring synchronized
+lyrics and falling back to static lyrics. It receives no Spotify credential and
+keeps no negative cache after transient provider failures. Spool intentionally
+has no proxy, Spotify Desktop/Spicetify companion bridge, loopback lyrics
+service, or desktop credential extraction.
 
 The controller chooses exactly one path for each command. SDK methods are used
 for commands best targeted at the browser player; device-level operations such

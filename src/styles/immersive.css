@@ -154,6 +154,7 @@
 }
 
 .im-controls .ic {
+  position: relative;
   display: grid;
   opacity: 0.92;
   color: #fff;

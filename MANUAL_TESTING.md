@@ -184,13 +184,18 @@ Press repeat three times and verify the order `off` -> `context` -> `track` ->
 Open **Up Next** (or press Q). Confirm it renders a **Now Playing** row and the
 upcoming Spotify items with artwork, title, artist/show names, and sensible
 track/episode handling. Click the first and then a later ordinary upcoming song.
-Spool should reach the selected occurrence by advancing through Spotify's real
-queue, without issuing a one-song Start Playback request or duplicating that
-song. Episode, local, null, restricted, and unplayable rows must remain grey and
-inert. If another Spotify client changes the queue while Spool is advancing, a
-readable reconciliation notice is acceptable. Skip a track and verify the queue
-refreshes. An empty Spotify queue should show an honest empty state. **Clear**,
-remove, and drag to reorder must remain inactive.
+When the current source is an album or playlist, Spool should issue one Start
+Playback request with that context and the selected track offset; Spotify should
+rebuild the remaining queue. It must not send a burst of Skip Next commands to
+walk down the list. A source without an addressable album/playlist context may
+start the selected track directly because Spotify exposes no jump-to-queue-row
+endpoint. If Spotify has appended autoplay recommendations after an album,
+click one of those recommendation rows and confirm Spool starts from that
+visible recommendation tail instead of sending an invalid album offset.
+Episode, local, null, restricted, and unplayable rows must remain grey and
+inert. Skip a track and verify the queue refreshes. An empty Spotify queue
+should show an honest empty state. **Clear**, remove, and drag to reorder must
+remain inactive.
 
 Open **Library**. Confirm Liked Songs and every playlist returned by Spotify are
 listed. The back arrow belongs beside the **Library** title. An
@@ -205,9 +210,13 @@ expose playlist folders or DJ; Spool must not invent either.
 
 Open **Search** from the dock or press `/`. Confirm the debounced results are
 grouped into Songs, Artists, Albums, and Playlists. Song results should start in
-their album context; artist, album, and playlist results should start the whole
-returned context. Unavailable results must stay inert, and the external Spotify
-link must not accidentally trigger playback.
+their album context; artist and playlist results should start the whole returned
+context. Selecting an album should open its Album page instead of immediately
+starting playback. Confirm the page shows its artwork, artist, year, song count,
+total duration, complete paginated track list, per-song artist and duration, and
+a back arrow beside **Album**. Play a middle song and verify Spotify retains the
+album context and continues with the following tracks. Unavailable rows must
+stay inert, and the external Spotify link must not accidentally trigger playback.
 
 ### 16. Test devices, volume, system media, and immersive mode
 
@@ -217,19 +226,13 @@ selecting another available device transfers playback there. After transfer,
 the top banner should offer **Listen here** again. Select Spool and confirm it
 hides.
 
-Open Sound and change **Spool volume**; audible browser volume and the numeric
-value should agree. Up/Down should change it by five percent while Shift+Up/Down
-must leave the inactive speed control alone. On iOS, Spotify may leave browser
-volume under hardware control. Toggle **Show song in media player** and verify
-OS/browser metadata appears and clears. Toggle **Headphone click → skip** and
-verify next/previous media keys become active only while Spool owns playback.
-
 Press L to open the floating lyrics widget while a normal song is playing.
 Synced lyrics should highlight and follow the current line; wheel/touch scrolling
 should pause auto-follow for about five seconds, and clicking a timed line should
 seek Spotify. Plain lyrics should render without fake timing. Instrumental and
 not-found responses should be stated honestly. Provider failures must fall
-through without breaking playback or logging a Bearer token.
+through without breaking playback or logging a Bearer token. The LRCLIB request
+must remain a direct, header-free GET so it does not trigger a CORS preflight.
 
 Open immersive mode with its button or F, then use its lyrics button. Confirm
 its artwork, title, artists, progress, lyrics, play/pause, previous/next, seek,
@@ -254,16 +257,6 @@ Choose **Log out**. The SDK device should disconnect, playback data should clear
 and login/setup should become visible. In browser developer tools, inspect
 storage by key name only and confirm `spool.auth.tokens` is absent; do not expose
 or paste any prior token value. Reload and verify Spool stays logged out.
-
-### 19. Verify inactive legacy controls cannot alter playback
-
-While a track is playing, try the inactive Sound controls (speed, reverb,
-crossfade, gapless, and EQ), Import/Dropbox, lyrics editing, statistics,
-playlist editing, Clear Queue, and queue-item editing. Each inactive surface
-must remain disabled or explain that it is not connected. Playback speed,
-effects, queue order, and position must not change. There must be no second local
-`HTMLAudioElement`, Web Audio graph, or legacy `musicplayer` database competing
-with the Spotify SDK.
 
 ## Interpreting common failures
 
@@ -310,6 +303,16 @@ the callback URL, authorization code, verifier, or token values.
   content extensions and retry in a clean browser profile.
 - Check that the Spotify SDK script and Spotify API requests were not blocked by
   the network, DNS filter, VPN, or browser policy.
+
+### LRCLIB certificate or network error
+
+Spool calls `https://lrclib.net/api` directly with a plain GET, exactly as the
+preserved single-file player does. `ERR_CERT_COMMON_NAME_INVALID` means the
+browser reached a host whose certificate does not belong to `lrclib.net`; it is
+not a CORS response Spool can repair. Check whether a DNS filter, ISP security
+feature, VPN, antivirus, or router has replaced the domain. Allow `lrclib.net`
+or use a trusted encrypted-DNS resolver, then reload. Do not disable certificate
+validation and do not add a local proxy to Spool.
 
 ### Redirect or authorization loops
 

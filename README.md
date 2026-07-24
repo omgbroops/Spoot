@@ -16,12 +16,16 @@ backend, or Spotify Client Secret.
 - play/pause, previous/next, seeking, shuffle, and repeat
 - live browser volume, Media Session metadata, and optional media-key skipping
 - normalized Spotify playback state, artwork, progress, and queue rendering
-- queue-preserving click-to-play for ordinary songs in Up Next
+- queue selection that repositions the active album/playlist in one playback
+  request, while preserving Spotify's appended recommendation tail when the
+  selected song is outside that context
 - Liked Songs plus fully paginated owned/collaborative playlists; playlist
   playback keeps the full Spotify context and selected position
 - playlist song counts, exact loaded duration, album names, and track durations
 - metadata-only display for followed playlists Spotify will not expose
 - Spotify catalog search across songs, artists, albums, and playlists
+- album pages with complete paginated track lists, release metadata, duration,
+  and context-preserving playback from any selected song
 - synced or plain lyrics in the floating and immersive players, with
   click-to-seek and timed auto-follow
 - draggable widget positions and responsive immersive mode
@@ -122,20 +126,12 @@ collaborates on. Followed Spotify/editorial/generated playlists that appear in
 `/me/playlists` stay visible as grey metadata-only rows instead of pretending
 to be empty.
 
-Search uses Spotify's public catalog endpoint. Lyrics are a best-effort static
-browser integration: Spool tries the provider formats used by BetterLyrics,
-prefers synchronized responses, and falls back to
-[LRCLIB](https://www.lrclib.net/docs). Provider CORS, availability, and catalog
-coverage can vary. Spool deliberately does not include BetterLyrics' optional
-Spotify Desktop/Spicetify companion bridge, and it never runs a local service
-or extracts desktop credentials.
-
-Local-file and Dropbox import, playlist editing, recommendations, statistics,
-sleep timer, lyrics editing/manual synchronization, full queue editing,
-playback speed, EQ, reverb, crossfade, and gapless controls remain inactive.
-The Sound modal's Spool volume is the deliberate exception and controls only
-the browser SDK device. No inactive surface reports fake success or controls a
-hidden local audio engine.
+Search and album pages use Spotify's public catalog endpoints. Lyrics remain a
+fully serverless, best-effort browser integration: Spool sends plain GET
+requests directly to [LRCLIB](https://lrclib.net/), prefers synchronized
+responses, and falls back to plain lyrics. Provider availability, local DNS
+filtering, and catalog coverage can vary. Spool never runs a local proxy or
+extracts Spotify Desktop credentials.
 
 The original local player is preserved, unchanged, under [`reference/`](./reference/README.md).
 See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for runtime boundaries and

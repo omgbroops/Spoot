@@ -15,6 +15,9 @@ export class SpotifyPlaybackSdk extends Emitter {
   #connected = false;
   #connectPromise = null;
   #connectionGeneration = 0;
+  #tokenRequestTail = Promise.resolve();
+  #sdkTokenRequestCount = 0;
+  #lastSdkToken = null;
 
   constructor({
     tokenProvider,
@@ -78,20 +81,15 @@ export class SpotifyPlaybackSdk extends Emitter {
     if (generation !== this.#connectionGeneration) throw connectionCancelledError();
 
     this.emit("status", { state: "connecting-player" });
+    this.#tokenRequestTail = Promise.resolve();
+    this.#sdkTokenRequestCount = 0;
+    this.#lastSdkToken = null;
     const player = new Spotify.Player({
       name: this.#name,
       // Spool owns the optional, user-toggleable Media Session integration.
       enableMediaSession: false,
       getOAuthToken: (callback) => {
-        Promise.resolve(this.#tokenProvider.getAccessToken())
-          .then((token) => callback(token))
-          .catch((error) => {
-            this.emit("error", {
-              type: "authentication_error",
-              message: "Spotify authorization expired.",
-              error,
-            });
-          });
+        this.#provideSdkToken(callback, generation);
       },
     });
 
@@ -161,6 +159,9 @@ export class SpotifyPlaybackSdk extends Emitter {
     this.#connectPromise = null;
     this.#deviceId = null;
     this.#connected = false;
+    this.#tokenRequestTail = Promise.resolve();
+    this.#sdkTokenRequestCount = 0;
+    this.#lastSdkToken = null;
     player?.disconnect?.();
     this.emit("status", { state: "logged-in" });
   }
@@ -214,6 +215,33 @@ export class SpotifyPlaybackSdk extends Emitter {
       if (!isCurrent()) return;
       this.emit("autoplay-failed", {
         message: "Press play once to allow browser audio for Spool.",
+      });
+    });
+  }
+
+  #provideSdkToken(callback, generation) {
+    const forceRefresh = this.#sdkTokenRequestCount > 0;
+    this.#sdkTokenRequestCount += 1;
+    const operation = this.#tokenRequestTail.catch(() => {}).then(async () => {
+      if (generation !== this.#connectionGeneration) return;
+      let token = await this.#tokenProvider.getAccessToken({ forceRefresh });
+      if (this.#lastSdkToken && token === this.#lastSdkToken) {
+        token = await this.#tokenProvider.getAccessToken({ forceRefresh: true });
+      }
+      if (!token || (this.#lastSdkToken && token === this.#lastSdkToken)) {
+        throw new Error("Spotify did not issue a fresh access token for the browser player.");
+      }
+      if (generation !== this.#connectionGeneration) return;
+      this.#lastSdkToken = token;
+      callback(token);
+    });
+    this.#tokenRequestTail = operation.catch(() => {});
+    operation.catch((error) => {
+      if (generation !== this.#connectionGeneration) return;
+      this.emit("error", {
+        type: "authentication_error",
+        message: "Spotify authorization expired. Reconnect Spool to continue playing.",
+        error,
       });
     });
   }

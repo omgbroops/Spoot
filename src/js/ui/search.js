@@ -9,7 +9,7 @@ const GROUPS = Object.freeze([
 
 let cleanup;
 
-export function setupSearch({ onQuery, onPlay } = {}) {
+export function setupSearch({ onQuery, onPlay, onOpenAlbum } = {}) {
   cleanup?.();
   const form = document.getElementById("search-form");
   const input = document.getElementById("search-input");
@@ -27,6 +27,11 @@ export function setupSearch({ onQuery, onPlay } = {}) {
     timer = setTimeout(() => onQuery?.(input.value), 280);
   };
   const click = (event) => {
+    const album = event.target.closest("[data-search-open-album]");
+    if (album && !album.disabled) {
+      onOpenAlbum?.({ id: album.dataset.searchOpenAlbum });
+      return;
+    }
     const action = event.target.closest("[data-search-play]");
     if (!action || action.disabled) return;
     onPlay?.({
@@ -99,15 +104,23 @@ function searchRow(item) {
   const subtitle = document.createElement("span");
   const badge = document.createElement("span");
 
-  row.className = `search-result search-${item.type}${item.playable ? "" : " unavailable"}`;
+  const opensAlbum = item.type === "album" && item.browseable !== false && Boolean(item.id);
+  const interactive = item.type === "album" ? opensAlbum : item.playable;
+  row.className = `search-result search-${item.type}${interactive ? "" : " unavailable"}`;
   play.type = "button";
   play.className = "search-result-main";
-  play.disabled = !item.playable;
-  play.dataset.searchPlay = "";
-  if (item.uri) play.dataset.searchUri = item.uri;
-  if (item.contextUri) play.dataset.searchContext = item.contextUri;
-  play.dataset.searchContextOnly = String(item.type !== "track");
-  play.setAttribute("aria-label", item.playable ? `Play ${item.title}` : `${item.title} is unavailable`);
+  play.disabled = !interactive;
+  if (opensAlbum) {
+    play.dataset.searchOpenAlbum = item.id;
+  } else {
+    play.dataset.searchPlay = "";
+    if (item.uri) play.dataset.searchUri = item.uri;
+    if (item.contextUri) play.dataset.searchContext = item.contextUri;
+    play.dataset.searchContextOnly = String(item.type !== "track");
+  }
+  play.setAttribute("aria-label", interactive
+    ? `${opensAlbum ? "Open" : "Play"} ${item.title}`
+    : `${item.title} is unavailable`);
 
   image.src = item.artworkUrl || DEFAULT_COVER;
   image.alt = "";
@@ -119,7 +132,7 @@ function searchRow(item) {
   badge.className = "search-type";
   badge.textContent = item.type === "track" ? "Song" : item.type[0].toUpperCase() + item.type.slice(1);
   copy.append(title, subtitle);
-  play.append(image, copy, badge, playIcon());
+  play.append(image, copy, badge, resultIcon(opensAlbum));
   row.append(play);
 
   if (item.externalUrl) {
@@ -135,11 +148,13 @@ function searchRow(item) {
   return row;
 }
 
-function playIcon() {
+function resultIcon(opensAlbum = false) {
   const icon = document.createElement("span");
   icon.className = "search-play-icon";
   icon.setAttribute("aria-hidden", "true");
-  icon.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>';
+  icon.innerHTML = opensAlbum
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m9 18 6-6-6-6"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>';
   return icon;
 }
 

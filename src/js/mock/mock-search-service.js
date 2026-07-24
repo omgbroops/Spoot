@@ -16,6 +16,19 @@ export class MockSearchService {
         externalUrl: null,
         playable: true,
       }));
-    return { tracks, artists: [], albums: [], playlists: [], total: tracks.length };
+    const albums = !needle || "afterimage spool mock artists".includes(needle)
+      ? [{
+          id: "mock-album",
+          type: "album",
+          title: "Afterimage",
+          subtitle: "Spool Mock Artists · 2 tracks",
+          artworkUrl: MOCK_TRACKS[0]?.artworkUrl || null,
+          contextUri: "spotify:album:mockalbum",
+          externalUrl: null,
+          playable: true,
+          browseable: true,
+        }]
+      : [];
+    return { tracks, artists: [], albums, playlists: [], total: tracks.length + albums.length };
   }
 }

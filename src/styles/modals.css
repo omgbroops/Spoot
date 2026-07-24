@@ -81,6 +81,14 @@
   width: min(94vw, 760px);
 }
 
+#modal-album {
+  width: min(94vw, 760px);
+}
+
+.album-body {
+  min-height: 390px;
+}
+
 .search-body {
   min-height: 360px;
 }
@@ -466,6 +474,170 @@
   flex-direction: column;
 }
 
+.album-detail-head {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 18px;
+  align-items: end;
+  padding: 2px 4px 18px;
+  border-bottom: 0.5px solid var(--stroke-soft);
+  margin-bottom: 8px;
+}
+
+.album-detail-cover {
+  width: 112px;
+  height: 112px;
+  border-radius: 17px;
+  background: #161619;
+  box-shadow: 0 14px 30px -20px rgba(0, 0, 0, 0.9);
+  object-fit: cover;
+}
+
+.album-detail-copy {
+  min-width: 0;
+}
+
+.album-kind {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.album-detail-copy h2 {
+  overflow: hidden;
+  margin: 0;
+  font-size: clamp(22px, 4vw, 34px);
+  font-weight: 650;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.album-artist,
+.album-meta {
+  overflow: hidden;
+  margin: 5px 0 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.album-artist {
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.album-meta {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.album-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.album-open-spotify {
+  text-decoration: none;
+}
+
+.album-track-head,
+.album-track {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 52px;
+  gap: 10px;
+  align-items: center;
+}
+
+.album-track-head {
+  padding: 7px 10px 8px;
+  border-bottom: 0.5px solid var(--stroke-soft);
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.album-track-head span:last-child {
+  text-align: right;
+}
+
+.album-tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.album-track {
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 15px;
+  color: inherit;
+  text-align: left;
+  transition: background 0.14s ease, opacity 0.14s ease;
+}
+
+.album-track:hover,
+.album-track:focus-visible {
+  background: var(--hover);
+}
+
+.album-track.unavailable {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.album-track-number,
+.album-track-duration {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.album-track-number {
+  text-align: center;
+}
+
+.album-track-duration {
+  text-align: right;
+}
+
+.album-track-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.album-track-copy strong,
+.album-track-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.album-track-copy strong {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.album-track-copy span {
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
+.album-message {
+  min-height: 250px;
+}
+
 .head-btns {
   display: flex;
   align-items: center;
@@ -771,6 +943,13 @@ button.toggle {
   margin-bottom: 6px;
 }
 
+.sound-api-note {
+  margin: -3px 0 14px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
 .eq-setting {
   margin-top: 20px;
   margin-bottom: 6px;
@@ -887,6 +1066,25 @@ button.toggle {
   .library-track-album,
   .library-track-head span:nth-child(3) {
     display: none;
+  }
+
+  .album-detail-head {
+    grid-template-columns: 78px minmax(0, 1fr);
+    gap: 13px;
+  }
+
+  .album-detail-cover {
+    width: 78px;
+    height: 78px;
+    border-radius: 14px;
+  }
+
+  .album-detail-copy h2 {
+    font-size: 22px;
+  }
+
+  .album-actions {
+    flex-wrap: wrap;
   }
 
   .spotify-setting {

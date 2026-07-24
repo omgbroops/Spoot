@@ -7,6 +7,7 @@ import {
   interpolateProgress,
 } from "./playback-state.js";
 import { normalizeQueueResponse } from "./queue-service.js";
+import { directPlaybackBlockReason } from "./playability.js";
 
 const REPEAT_ORDER = Object.freeze(["off", "context", "track"]);
 
@@ -141,7 +142,15 @@ export class PlaybackController extends Emitter {
     }
   }
 
-  async playNow(uri, { contextUri = null, contextPosition = null, uris = null } = {}) {
+  async playNow(
+    uri,
+    {
+      contextUri = null,
+      contextPosition = null,
+      uris = null,
+      fallbackUris = null,
+    } = {},
+  ) {
     if (!this.deviceId) {
       throw new Error("Wait for the Spool playback device to become ready.");
     }
@@ -174,7 +183,21 @@ export class PlaybackController extends Emitter {
               uris: Array.isArray(uris) && uris.length ? uris : [uri],
               positionMs: 0,
             };
-        await this.#api.startPlayback(playbackRequest);
+        try {
+          await this.#api.startPlayback(playbackRequest);
+        } catch (error) {
+          const canFallbackFromContext = contextUri
+            && contextOffset?.uri
+            && Array.isArray(fallbackUris)
+            && fallbackUris.length
+            && [400, 404].includes(error?.status);
+          if (!canFallbackFromContext) throw error;
+          await this.#api.startPlayback({
+            deviceId: this.deviceId,
+            uris: fallbackUris,
+            positionMs: 0,
+          });
+        }
         if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
 
         const [state] = await Promise.all([
@@ -204,43 +227,37 @@ export class PlaybackController extends Emitter {
     if (!Number.isInteger(queueIndex) || queueIndex < 0) {
       throw new RangeError("The selected Spotify queue position is invalid.");
     }
+    const queueSnapshot = Array.isArray(this.queue?.upcoming)
+      ? [...this.queue.upcoming]
+      : [];
+    if (queueIndex >= queueSnapshot.length) {
+      throw new RangeError("That Spotify queue entry is no longer available.");
+    }
+    if (uri && queueSnapshot[queueIndex]?.uri !== uri) {
+      throw new RangeError("The Spotify queue changed before that item was selected.");
+    }
 
-    // Spotify exposes no queue-entry IDs and no jump-to-queue-item endpoint.
-    // Advancing through the confirmed queue is the only documented operation
-    // that preserves user-added entries and the current playback context.
-    const activation = Promise.resolve(this.#sdk.activateElement());
-    const commandGeneration = ++this.#playCommandGeneration;
-    const operation = this.#playCommandTail.catch(() => {}).then(async () => {
-      if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
-      await activation;
-      this.#setConnection("transferring-playback");
-      try {
-        for (let step = 0; step <= queueIndex; step += 1) {
-          if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
-          if (this.#sdk.ready) await this.#sdk.next();
-          else await this.#api.skipNext({ deviceId: this.deviceId });
-        }
-        const [state] = await Promise.all([
-          this.refreshState({ fresh: true }),
-          this.refreshQueue().catch(() => this.queue),
-        ]);
-        if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
-        this.#setConnection(state?.activeDevice ? "active" : "player-ready");
-        if (uri && state?.itemUri && state.itemUri !== uri) {
-          this.emit("notice", {
-            message: "Spotify changed the queue while Spool was moving to that song.",
-          });
-        }
-        return true;
-      } catch (error) {
-        if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
-        this.#setConnection("active", { message: error.message });
-        this.#emitCommandError("Spotify could not move to that queued song.", error);
-        throw error;
-      }
-    });
-    this.#playCommandTail = operation;
-    return operation;
+    const selectedItem = queueSnapshot[queueIndex];
+    const selectedUri = selectedItem?.uri || uri;
+    const contextUri = this.playbackState?.context?.uri || null;
+    const supportsTrackOffset = /^spotify:(?:album|playlist):/u.test(contextUri || "");
+    const albumContext = /^spotify:album:/u.test(contextUri || "");
+    const belongsToAlbum = !albumContext || selectedItem?.albumUri === contextUri;
+    const fallbackUris = queueSnapshot
+      .slice(queueIndex)
+      .filter((item) => directPlaybackBlockReason(item) === null)
+      .map((item) => item.uri);
+    if (!fallbackUris.length) fallbackUris.push(selectedUri);
+
+    // Spotify can reposition an album/playlist context in one Start Playback
+    // request. This lets Spotify rebuild the rest of the queue itself and avoids
+    // issuing one Skip Next request per row (which can trigger rate limiting).
+    // Album recommendations are distinguishable by album URI and start as the
+    // visible queue tail. Playlist recommendations are not labelled by the API,
+    // so a rejected context offset falls back once to that same queue tail.
+    return this.playNow(selectedUri, supportsTrackOffset && belongsToAlbum
+      ? { contextUri, fallbackUris }
+      : { uris: fallbackUris });
   }
 
   async togglePlay() {

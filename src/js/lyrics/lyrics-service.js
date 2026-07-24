@@ -1,11 +1,4 @@
-const SPICY_HOSTS = Object.freeze([
-  "https://api.spicylyrics.org",
-  "https://coregateway.spicylyrics.org",
-]);
-const SPICY_VERSION = "5.22.3";
-const SPOTIFY_LYRICS_BASE = "https://spclient.wg.spotify.com/color-lyrics/v2/track";
-const LRCLIB_BASE = "https://lrclib.net/api";
-const LRCLIB_CLIENT = "Spool v0.1.0 (personal non-commercial Spotify player)";
+const DEFAULT_LRCLIB_BASE = "https://lrclib.net/api";
 const CACHE_LIMIT = 40;
 
 export class LyricsProviderError extends Error {
@@ -15,15 +8,6 @@ export class LyricsProviderError extends Error {
     this.provider = provider;
     this.status = status;
   }
-}
-
-async function tokenFromProvider(tokenProvider) {
-  if (!tokenProvider) return "";
-  if (typeof tokenProvider === "function") return tokenProvider({ forceRefresh: false });
-  if (typeof tokenProvider.getAccessToken === "function") {
-    return tokenProvider.getAccessToken({ forceRefresh: false });
-  }
-  return "";
 }
 
 function lyricsKey(track) {
@@ -44,16 +28,19 @@ function normalizedTrack(track) {
     artist: track?.artist || track?.artistNames?.join(", ") || "",
     album: track?.albumName || track?.album?.name || "",
     durationMs: Math.max(0, Number(track?.durationMs || track?.duration_ms) || 0),
-    artworkUrl: track?.artworkUrl || track?.album?.images?.[0]?.url || "",
   };
 }
 
 export class LyricsService {
-  constructor({ tokenProvider, fetchImpl = globalThis.fetch, onDiagnostic } = {}) {
+  constructor({
+    fetchImpl = globalThis.fetch,
+    onDiagnostic,
+    baseUrl = DEFAULT_LRCLIB_BASE,
+  } = {}) {
     if (typeof fetchImpl !== "function") throw new TypeError("LyricsService requires fetch.");
-    this.tokenProvider = tokenProvider;
     this.fetchImpl = fetchImpl;
     this.onDiagnostic = onDiagnostic;
+    this.baseUrl = String(baseUrl || DEFAULT_LRCLIB_BASE).replace(/\/$/u, "");
     this.cache = new Map();
   }
 
@@ -63,53 +50,20 @@ export class LyricsService {
     const key = lyricsKey(track);
     if (this.cache.has(key)) return this.cache.get(key);
 
-    let token = "";
     try {
-      token = await tokenFromProvider(this.tokenProvider);
-    } catch (error) {
-      this.#diagnostic("spotify-token", error);
-    }
-
-    let spicyStatic = null;
-    if (token && track.id) {
-      try {
-        const spicy = await this.#fetchSpicy(track.id, token, signal);
-        if (spicy?.synced && spicy.lines.length) return this.#cache(key, spicy);
-        if (spicy?.lines.length) spicyStatic = spicy;
-      } catch (error) {
-        if (error?.name === "AbortError") throw error;
-        this.#diagnostic("spicylyrics", error);
+      const lyrics = await this.#fetchLrclib(track, signal);
+      if (lyrics?.lines.length || lyrics?.instrumental) {
+        remember(this.cache, key, lyrics);
+        return lyrics;
       }
-
-      try {
-        const spotify = await this.#fetchSpotify(track, token, signal);
-        if (spotify?.lines.length) return this.#cache(key, spotify);
-      } catch (error) {
-        if (error?.name === "AbortError") throw error;
-        this.#diagnostic("spotify-color-lyrics", error);
-      }
-    }
-
-    let lrclib = null;
-    try {
-      lrclib = await this.#fetchLrclib(track, signal);
-      if (lrclib?.synced && lrclib.lines.length) return this.#cache(key, lrclib);
-      if (lrclib?.instrumental) return this.#cache(key, lrclib);
     } catch (error) {
       if (error?.name === "AbortError") throw error;
       this.#diagnostic("lrclib", error);
     }
 
-    if (spicyStatic?.lines.length) return this.#cache(key, spicyStatic);
-    if (lrclib?.lines.length) return this.#cache(key, lrclib);
-    // A provider outage or browser CORS block is not proof that the track has
-    // no lyrics. Leave negative results uncached so revisiting the song retries.
+    // A provider outage is not proof that a track has no lyrics. Leave empty
+    // results uncached so revisiting the song retries after service recovery.
     return noLyrics();
-  }
-
-  #cache(key, lyrics) {
-    remember(this.cache, key, lyrics);
-    return lyrics;
   }
 
   #diagnostic(provider, error) {
@@ -121,64 +75,17 @@ export class LyricsService {
     });
   }
 
-  async #fetchSpicy(trackId, token, signal) {
-    const body = {
-      queries: [{
-        operation: "lyrics",
-        variables: { id: trackId, auth: "SpicyLyrics-WebAuth" },
-      }],
-      client: { version: SPICY_VERSION },
-    };
-    let lastError;
-    for (const host of SPICY_HOSTS) {
-      try {
-        const data = await this.#fetchJson(`${host}/query`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "SpicyLyrics-Version": SPICY_VERSION,
-            "SpicyLyrics-WebAuth": `Bearer ${token}`,
-          },
-          body: JSON.stringify(body),
-          signal,
-        }, "spicylyrics");
-        const result = (data?.queries ?? []).find((query) => query?.result)?.result;
-        if (result?.httpStatus !== 200 || !result.data) return null;
-        return normalizeSpicyLyrics(result.data);
-      } catch (error) {
-        if (error?.name === "AbortError") throw error;
-        lastError = error;
-      }
-    }
-    throw lastError || new LyricsProviderError("SpicyLyrics did not respond.", { provider: "spicylyrics" });
-  }
-
-  async #fetchSpotify(track, token, signal) {
-    const artwork = encodeURIComponent(track.artworkUrl || "");
-    const url = `${SPOTIFY_LYRICS_BASE}/${encodeURIComponent(track.id)}/image/${artwork}?format=json&vocalRemoval=false&market=from_token`;
-    const data = await this.#fetchJson(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "App-Platform": "WebPlayer",
-      },
-      signal,
-    }, "spotify");
-    return normalizeSpotifyLyrics(data);
-  }
-
   async #fetchLrclib(track, signal) {
     const exact = new URLSearchParams({
       track_name: track.title,
       artist_name: track.artist,
-      album_name: track.album,
-      duration: String(Math.round(track.durationMs / 1000)),
     });
+    if (track.album) exact.set("album_name", track.album);
+    if (track.durationMs) exact.set("duration", String(Math.round(track.durationMs / 1000)));
+
     let candidate = null;
     try {
-      candidate = await this.#fetchJson(`${LRCLIB_BASE}/get?${exact}`, {
-        headers: { "Lrclib-Client": LRCLIB_CLIENT },
-        signal,
-      }, "lrclib");
+      candidate = await this.#fetchJson(`${this.baseUrl}/get?${exact}`, { signal });
     } catch (error) {
       if (error?.name === "AbortError") throw error;
       if (error?.status !== 404) this.#diagnostic("lrclib-exact", error);
@@ -188,48 +95,52 @@ export class LyricsService {
       const fieldSearch = new URLSearchParams({
         track_name: track.title,
         artist_name: track.artist,
-        album_name: track.album,
       });
+      if (track.album) fieldSearch.set("album_name", track.album);
       const broadSearch = new URLSearchParams({
         q: `${track.title} ${track.artist}`.trim(),
       });
-      const runSearch = (params) => this.#fetchJson(`${LRCLIB_BASE}/search?${params}`, {
-        headers: { "Lrclib-Client": LRCLIB_CLIENT },
-        signal,
-      }, "lrclib").catch((error) => {
-        if (error?.name === "AbortError") throw error;
-        return [];
-      });
-      const [broadResults, fieldResults] = await Promise.all([
-        runSearch(broadSearch),
-        runSearch(fieldSearch),
-      ]);
-      const results = uniqueLrclibResults([
-        ...(Array.isArray(broadResults) ? broadResults : []),
-        ...(Array.isArray(fieldResults) ? fieldResults : []),
-      ]);
-      const matched = chooseLrclibResult(track, results);
+      const runSearch = (params) => this.#fetchJson(`${this.baseUrl}/search?${params}`, { signal })
+        .catch((error) => {
+          if (error?.name === "AbortError") throw error;
+          return [];
+        });
+      const fieldResults = await runSearch(fieldSearch);
+      let results = uniqueLrclibResults(Array.isArray(fieldResults) ? fieldResults : []);
+      let matched = chooseLrclibResult(track, results);
+      if (!matched?.syncedLyrics) {
+        const broadResults = await runSearch(broadSearch);
+        results = uniqueLrclibResults([
+          ...results,
+          ...(Array.isArray(broadResults) ? broadResults : []),
+        ]);
+        matched = chooseLrclibResult(track, results);
+      }
       if (matched?.syncedLyrics || !candidate?.plainLyrics) candidate = matched;
     }
     return normalizeLrclibLyrics(candidate);
   }
 
-  async #fetchJson(url, init, provider) {
+  async #fetchJson(url, { signal } = {}) {
     let response;
     try {
-      response = await Reflect.apply(this.fetchImpl, globalThis, [url, {
-        mode: "cors",
-        credentials: "omit",
-        ...init,
-      }]);
+      // Keep this a CORS-simple GET. The original single-file player uses the
+      // same direct request shape; adding a custom client header would force a
+      // preflight that LRCLIB intentionally does not allow from arbitrary web
+      // origins.
+      response = await Reflect.apply(this.fetchImpl, globalThis, [url, { signal }]);
     } catch (cause) {
       if (cause?.name === "AbortError") throw cause;
-      throw new LyricsProviderError(`Could not reach ${provider}.`, { provider, cause });
+      throw new LyricsProviderError("Could not reach LRCLIB.", {
+        provider: "lrclib",
+        cause,
+      });
     }
+
     const text = await response.text();
     if (!response.ok) {
-      throw new LyricsProviderError(`${provider} returned HTTP ${response.status}.`, {
-        provider,
+      throw new LyricsProviderError(`LRCLIB returned HTTP ${response.status}.`, {
+        provider: "lrclib",
         status: response.status,
       });
     }
@@ -237,7 +148,10 @@ export class LyricsService {
     try {
       return JSON.parse(text);
     } catch (cause) {
-      throw new LyricsProviderError(`${provider} returned invalid JSON.`, { provider, cause });
+      throw new LyricsProviderError("LRCLIB returned invalid JSON.", {
+        provider: "lrclib",
+        cause,
+      });
     }
   }
 }
@@ -278,105 +192,17 @@ export function normalizeLrclibLyrics(data) {
     : null;
 }
 
-export function normalizeSpotifyLyrics(data) {
-  const rawLines = data?.lyrics?.lines ?? data?.lines ?? [];
-  const lines = rawLines.map((line, index) => {
-    const startMs = spotifyTimestampMs(line, ["startTimeMs", "startTime", "time"]);
-    const nextStart = spotifyTimestampMs(rawLines[index + 1], ["startTimeMs", "startTime", "time"]);
-    const endMs = spotifyTimestampMs(line, ["endTimeMs", "endTime"]) || nextStart || startMs + 4500;
-    const text = cleanText(line?.words || line?.text || line?.Text);
-    return {
-      type: text ? "line" : "interlude",
-      startMs,
-      endMs: Math.max(endMs, startMs + 250),
-      text,
-    };
-  }).filter((line) => Number.isFinite(line.startMs));
-  if (!lines.length) return null;
-  return {
-    source: "spotify",
-    detail: "color-lyrics",
-    synced: true,
-    instrumental: false,
-    lines: withLineEnds(insertInterludes(lines), true),
-  };
-}
-
-export function normalizeSpicyLyrics(input) {
-  const data = unwrapSpicy(input);
-  if (!data || typeof data !== "object") return null;
-  const content = arrayValue(data, "Content", "content");
-  const staticLines = arrayValue(data, "Lines", "lines");
-  const declared = value(data, "Type", "type");
-  const inferred = content.some((entry) => arrayValue(value(entry, "Lead", "lead"), "Syllables", "syllables").length)
-    ? "Syllable"
-    : content.some((entry) => value(entry, "Text", "text"))
-      ? "Line"
-      : staticLines.length ? "Static" : "";
-  const ranks = { Static: 1, Line: 2, Syllable: 3 };
-  const type = (ranks[inferred] || 0) > (ranks[declared] || 0) ? inferred : declared || inferred;
-  let lines = [];
-
-  if (type === "Syllable") {
-    for (const entry of content) {
-      const lead = value(entry, "Lead", "lead") || {};
-      const syllables = arrayValue(lead, "Syllables", "syllables");
-      const text = syllables.map((syllable, index) => {
-        const fragment = String(value(syllable, "Text", "text", "RomanizedText", "romanizedText") || "");
-        const partOfWord = Boolean(value(syllable, "IsPartOfWord", "isPartOfWord"));
-        return fragment && index < syllables.length - 1 && !partOfWord ? `${fragment} ` : fragment;
-      }).join("").trim();
-      const startMs = spicyTimeMs(value(lead, "StartTime", "startTime", "start") ?? value(syllables[0], "StartTime", "startTime", "start"));
-      const endMs = spicyTimeMs(value(lead, "EndTime", "endTime", "end") ?? value(syllables.at(-1), "EndTime", "endTime", "end")) || startMs + 1000;
-      if (text) lines.push({ type: "syllable", startMs, endMs, text, background: false });
-
-      for (const background of arrayValue(entry, "Background", "background")) {
-        const parts = arrayValue(background, "Syllables", "syllables");
-        const backgroundText = parts.map((part) => value(part, "Text", "text") || "").join(" ").replace(/\s+/gu, " ").trim();
-        const backgroundStart = spicyTimeMs(value(background, "StartTime", "startTime", "start") ?? value(parts[0], "StartTime", "startTime", "start"));
-        const backgroundEnd = spicyTimeMs(value(background, "EndTime", "endTime", "end") ?? value(parts.at(-1), "EndTime", "endTime", "end")) || backgroundStart + 1000;
-        if (backgroundText) lines.push({ type: "syllable", startMs: backgroundStart, endMs: backgroundEnd, text: backgroundText, background: true });
-      }
-    }
-  } else if (type === "Line") {
-    lines = content.map((line, index) => {
-      const startMs = spicyTimeMs(value(line, "StartTime", "startTime", "start"));
-      const nextStart = spicyTimeMs(value(content[index + 1], "StartTime", "startTime", "start"));
-      const endMs = spicyTimeMs(value(line, "EndTime", "endTime", "end")) || nextStart || startMs + 4000;
-      return {
-        type: "line",
-        startMs,
-        endMs,
-        text: cleanText(value(line, "Text", "text", "RomanizedText", "romanizedText")),
-      };
-    }).filter((line) => line.text);
-  } else if (type === "Static") {
-    lines = staticLines.map((line) => ({
-      type: "static",
-      startMs: null,
-      endMs: null,
-      text: cleanText(value(line, "Text", "text", "RomanizedText", "romanizedText")),
-    })).filter((line) => line.text);
-  }
-  if (!lines.length) return null;
-  const synced = type === "Syllable" || type === "Line";
-  return {
-    source: "spicylyrics",
-    detail: type.toLocaleLowerCase(),
-    synced,
-    instrumental: false,
-    lines: synced ? withLineEnds(insertInterludes(lines), true) : lines,
-  };
-}
-
 function chooseLrclibResult(track, results) {
   const candidates = results.filter(Boolean);
   const matching = candidates.filter((item) => {
     const title = comparable(item.trackName || item.name);
+    const wantedTitle = comparable(track.title);
     const artist = comparable(item.artistName || item.artist);
-    const titleMatch = title === comparable(track.title) || title.includes(comparable(track.title)) || comparable(track.title).includes(title);
-    const artistMatch = !artist || !track.artist || comparable(track.artist).split(" ").some((part) => part && artist.includes(part));
-    const durationMatch = !Number.isFinite(Number(item.duration)) || Math.abs(Number(item.duration) * 1000 - track.durationMs) <= 4000;
+    const wantedArtist = comparable(track.artist);
+    const titleMatch = title === wantedTitle || title.includes(wantedTitle) || wantedTitle.includes(title);
+    const artistMatch = !artist || !wantedArtist || wantedArtist.split(" ").some((part) => part && artist.includes(part));
+    const durationMatch = !Number.isFinite(Number(item.duration))
+      || Math.abs(Number(item.duration) * 1000 - track.durationMs) <= 4000;
     return titleMatch && artistMatch && durationMatch;
   });
   return matching.find((item) => item.syncedLyrics)
@@ -409,59 +235,14 @@ function insertInterludes(lines) {
   return result;
 }
 
-function withLineEnds(lines, preserveKnownEnds = false) {
+function withLineEnds(lines) {
   return lines.map((line, index) => {
     const nextStart = lines[index + 1]?.startMs;
-    const computedEnd = Number.isFinite(nextStart)
+    const endMs = Number.isFinite(nextStart)
       ? Math.max(nextStart - 50, line.startMs + 250)
       : Math.max(line.endMs || 0, line.startMs + 800);
-    return {
-      ...line,
-      endMs: preserveKnownEnds && Number.isFinite(line.endMs) && line.endMs > line.startMs
-        ? line.endMs
-        : computedEnd,
-    };
+    return { ...line, endMs };
   });
-}
-
-function unwrapSpicy(data) {
-  if (typeof data === "string") {
-    try { return unwrapSpicy(JSON.parse(data)); } catch { return null; }
-  }
-  if (!data || typeof data !== "object") return null;
-  for (const key of ["lyrics", "Lyrics", "data", "result"]) {
-    if (data[key] && data[key] !== data) {
-      const nested = unwrapSpicy(data[key]);
-      if (nested) return nested;
-    }
-  }
-  return data;
-}
-
-function value(item, ...keys) {
-  for (const key of keys) if (item?.[key] != null) return item[key];
-  return undefined;
-}
-
-function arrayValue(item, ...keys) {
-  const found = value(item, ...keys);
-  return Array.isArray(found) ? found : [];
-}
-
-function spicyTimeMs(input) {
-  const number = Number(input);
-  return Number.isFinite(number) ? Math.max(0, number * 1000) : 0;
-}
-
-function spotifyTimestampMs(item, keys) {
-  for (const key of keys) {
-    if (item?.[key] == null) continue;
-    const number = Number(item[key]);
-    if (!Number.isFinite(number)) return 0;
-    if (key.toLocaleLowerCase().endsWith("ms")) return Math.max(0, number);
-    return Math.max(0, number > 1000 ? number : number * 1000);
-  }
-  return 0;
 }
 
 function cleanText(input) {
