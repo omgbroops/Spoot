@@ -379,7 +379,9 @@ export class PlaybackController extends Emitter {
   }
 
   #now() {
-    return typeof this.#clock === "function" ? this.#clock() : this.#clock.now();
+    return typeof this.#clock?.now === "function"
+      ? this.#clock.now()
+      : this.#clock();
   }
 }
 

@@ -2,7 +2,7 @@ export const SPOTIFY_API_BASE_URL = "https://api.spotify.com/v1";
 export const DEFAULT_MAX_RATE_LIMIT_RETRY_MS = 60_000;
 
 function clockNow(clock) {
-  return typeof clock === "function" ? clock() : clock.now();
+  return typeof clock?.now === "function" ? clock.now() : clock();
 }
 
 function createAbortError(signal) {

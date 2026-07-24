@@ -138,6 +138,8 @@ test("controller connects once, hydrates state, and transfers only on user actio
   assert.equal(controller.deviceId, "spool-device");
   assert.equal(controller.playbackState.title, "Signal Path");
   assert.equal(controller.playbackState.activeDevice, true);
+  assert.equal(typeof controller.playbackState.authoritativeAt, "number");
+  assert.ok(Number.isFinite(controller.playbackState.authoritativeAt));
 
   await controller.transferHere();
   assert.deepEqual(

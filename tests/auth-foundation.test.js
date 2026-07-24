@@ -83,6 +83,43 @@ test("refresh-token expiry tracks six calendar months without extending on rotat
   );
 });
 
+test("production Date clock preserves fresh OAuth transactions and token sessions", async () => {
+  const tokenStorage = new MemoryStorage();
+  const transactionStorage = new MemoryStorage();
+  const auth = new SpotifyAuth({
+    clientId: "client-id",
+    redirectUri: "http://127.0.0.1:5173/",
+    fetchImpl: async () => jsonResponse({
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      token_type: "Bearer",
+      expires_in: 3600,
+    }),
+    storage: tokenStorage,
+    transactionStorage,
+    cryptoImpl: webcrypto,
+    locationImpl: { origin: "http://127.0.0.1:5173" },
+    historyImpl: { replaceState() {} },
+  });
+
+  const before = Date.now();
+  const state = new URL(await auth.createAuthorizationUrl()).searchParams.get("state");
+  const saved = JSON.parse(transactionStorage.getItem("spool.auth.pkce"));
+  const createdAt = saved.transactions[0].createdAt;
+  assert.equal(typeof createdAt, "number");
+  assert.ok(createdAt >= before && createdAt <= Date.now());
+  assert.equal(auth.readTransaction(state)?.state, state);
+
+  const result = await auth.handleCallback({
+    url: `http://127.0.0.1:5173/?code=auth-code&state=${state}`,
+    cleanup: false,
+  });
+  assert.equal(result.handled, true);
+  assert.equal(result.tokens.accessToken, "access-token");
+  assert.equal(auth.hasSession(), true);
+  assert.equal(transactionStorage.getItem("spool.auth.pkce"), null);
+});
+
 test("SpotifyAuth validates callback state, exchanges tokens, and cleans OAuth parameters", async () => {
   const now = 10_000;
   const storage = new MemoryStorage();

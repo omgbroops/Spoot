@@ -103,6 +103,30 @@ test("API client honors Retry-After once but never retries QUOTA_EXCEEDED", asyn
   assert.equal(quotaCalls, 1);
 });
 
+test("API client default Date clock handles HTTP-date Retry-After values", async () => {
+  const sleeps = [];
+  let requestCount = 0;
+  const retryAt = new Date(Date.now() + 5_000).toUTCString();
+  const client = new SpotifyApiClient({
+    tokenProvider: async () => "access",
+    sleep: async (milliseconds) => sleeps.push(milliseconds),
+    fetchImpl: async () => {
+      requestCount += 1;
+      return requestCount === 1
+        ? jsonResponse(
+            { error: { status: 429, message: "Slow down" } },
+            { status: 429, headers: { "retry-after": retryAt } },
+          )
+        : jsonResponse({ queue: [] });
+    },
+  });
+
+  assert.deepEqual(await client.getQueue(), { queue: [] });
+  assert.equal(requestCount, 2);
+  assert.equal(sleeps.length, 1);
+  assert.ok(sleeps[0] >= 3_000 && sleeps[0] <= 5_000);
+});
+
 test("playback-state hydration is deduplicated while an un-signaled request is in flight", async () => {
   let release;
   let fetchCount = 0;

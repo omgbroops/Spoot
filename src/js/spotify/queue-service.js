@@ -1,7 +1,7 @@
 import { normalizePlaybackItem } from "./playback-state.js";
 
 function clockNow(clock) {
-  return typeof clock === "function" ? clock() : clock.now();
+  return typeof clock?.now === "function" ? clock.now() : clock();
 }
 
 export function assertQueueableSpotifyUri(uri) {

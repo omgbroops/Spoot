@@ -20,7 +20,7 @@ export const DEFAULT_MAX_PENDING_OAUTH_TRANSACTIONS = 4;
 const OAUTH_TRANSACTION_STORAGE_VERSION = 2;
 
 function clockNow(clock) {
-  return typeof clock === "function" ? clock() : clock.now();
+  return typeof clock?.now === "function" ? clock.now() : clock();
 }
 
 function defaultTransactionStorage(fallback) {

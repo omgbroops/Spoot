@@ -2,7 +2,7 @@ export const DEFAULT_TOKEN_STORAGE_KEY = "spool.auth.tokens";
 export const SPOTIFY_REFRESH_TOKEN_LIFETIME_MONTHS = 6;
 
 function nowFrom(clock) {
-  return typeof clock === "function" ? clock() : clock.now();
+  return typeof clock?.now === "function" ? clock.now() : clock();
 }
 
 function normalizeScopes(scopes) {

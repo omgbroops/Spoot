@@ -7,8 +7,8 @@ import {
   SpotifyAuth,
   SpotifyAuthError,
   shouldReloadOAuthPageAfterBfcacheRestore,
-} from "./auth/spotify-auth.js?v=20260723-oauth8";
-import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-oauth8";
+} from "./auth/spotify-auth.js?v=20260723-oauth9";
+import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-oauth9";
 import { DEFAULT_TOKEN_STORAGE_KEY } from "./auth/token-store.js";
 import { SpotifyApiClient, SpotifyApiError } from "./spotify/api-client.js";
 import { SpotifyPlaybackSdk } from "./spotify/playback-sdk.js";

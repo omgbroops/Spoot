@@ -170,3 +170,19 @@ test("queue service deduplicates refresh and refreshes after a successful add", 
   assert.equal(refreshed.upcoming[0].type, "episode");
   assert.equal(getCalls, 2);
 });
+
+test("queue service default Date clock records a numeric timestamp", async () => {
+  const service = new SpotifyQueueService({
+    apiClient: {
+      async getQueue() {
+        return { currently_playing: null, queue: [] };
+      },
+      async addToQueue() {},
+    },
+  });
+
+  const before = Date.now();
+  const queue = await service.refresh();
+  assert.equal(typeof queue.receivedAt, "number");
+  assert.ok(queue.receivedAt >= before && queue.receivedAt <= Date.now());
+});
