@@ -7,8 +7,8 @@ import {
   SpotifyAuth,
   SpotifyAuthError,
   shouldReloadOAuthPageAfterBfcacheRestore,
-} from "./auth/spotify-auth.js?v=20260723-oauth9";
-import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-oauth9";
+} from "./auth/spotify-auth.js?v=20260723-oauth10";
+import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-oauth10";
 import { DEFAULT_TOKEN_STORAGE_KEY } from "./auth/token-store.js";
 import { SpotifyApiClient, SpotifyApiError } from "./spotify/api-client.js";
 import { SpotifyPlaybackSdk } from "./spotify/playback-sdk.js";
@@ -83,6 +83,7 @@ let dockVisible = true;
 let lyricsVisible = false;
 let oauthPopup;
 let oauthCallbackInFlightState;
+let pendingOAuthCallback;
 const oauthChannel = createOAuthChannel();
 
 window.addEventListener("pageshow", (event) => {
@@ -378,6 +379,7 @@ async function handlePrimaryAction() {
   if (connectionState === "logged-in") return connectPlayer();
   if (connectionState === "player-ready") return transferHere();
   if (connectionState === "temporarily-unavailable" || connectionState === "error") {
+    if (pendingOAuthCallback) return retryPendingOAuthCallback();
     return controller ? connectPlayer() : login();
   }
 }
@@ -391,6 +393,7 @@ async function login() {
     showSetupHelp();
     return;
   }
+  pendingOAuthCallback = undefined;
   oauthPopup = window.open(
     "about:blank",
     OAUTH_POPUP_NAME,
@@ -448,14 +451,19 @@ async function handleOAuthCallbackMessage(data, source = null) {
   });
   try {
     await auth.handleCallback({ url: callbackUrl.href, cleanup: false });
+    pendingOAuthCallback = undefined;
     completeOAuthOnOriginalTab();
     postOAuthResult(source, { ok: true, state: callbackState });
   } catch (error) {
+    pendingOAuthCallback = error?.code === "token_network_error"
+      ? { url: callbackUrl.href, state: callbackState }
+      : undefined;
     renderOAuthCallbackFailure(error);
     postOAuthResult(source, {
       ok: false,
       state: callbackState,
       message: humanizeError(error),
+      close: true,
     });
   } finally {
     oauthPopup = undefined;
@@ -463,6 +471,11 @@ async function handleOAuthCallbackMessage(data, source = null) {
       oauthCallbackInFlightState = undefined;
     }
   }
+}
+
+function retryPendingOAuthCallback() {
+  if (!pendingOAuthCallback) return login();
+  return handleOAuthCallbackMessage({ url: pendingOAuthCallback.url });
 }
 
 function postOAuthResult(target, result) {
@@ -507,6 +520,7 @@ function handleOAuthResultMessage(message) {
       ? message.message
       : "Spotify sign-in could not be completed. Please try again.",
   });
+  if (message.close) window.close();
 }
 
 function createOAuthChannel() {
@@ -810,6 +824,9 @@ function humanizeError(error) {
       }
       return "Spotify sign-in returned without its verification state. Please reload and try again.";
     }
+    if (error.code === "token_network_error") {
+      return "The browser blocked Spotify's token request. Your login verifier was kept; press Retry after allowing accounts.spotify.com.";
+    }
     if (isAuthorizationExpired(error)) return "Spotify authorization expired. Log in again.";
   }
   if (navigator.onLine === false) return "The network is offline.";
@@ -833,6 +850,9 @@ function safeDiagnostic(error, operation) {
     reason: error?.reason,
     authReason: error?.details?.reason,
     pendingTransactions: error?.details?.pendingTransactionCount,
+    transport: error?.details?.transport,
+    fetchFailure: error?.details?.fetchFailure,
+    xhrFailure: error?.details?.xhrFailure,
     operation,
     message: error?.message,
   };

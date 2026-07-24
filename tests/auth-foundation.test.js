@@ -120,6 +120,111 @@ test("production Date clock preserves fresh OAuth transactions and token session
   assert.equal(transactionStorage.getItem("spool.auth.pkce"), null);
 });
 
+test("SpotifyAuth falls back to XMLHttpRequest when browser fetch is intercepted", async () => {
+  const storage = new MemoryStorage();
+  const transactionStorage = new MemoryStorage();
+  let xhr;
+  const auth = new SpotifyAuth({
+    clientId: "client-id",
+    redirectUri: "http://127.0.0.1:5173/",
+    fetchImpl: async () => {
+      throw new TypeError("Failed to fetch");
+    },
+    xhrFactory: () => {
+      xhr = {
+        status: 0,
+        responseText: "",
+        open(method, url) {
+          this.method = method;
+          this.url = url;
+        },
+        setRequestHeader(name, value) {
+          this.header = [name, value];
+        },
+        getResponseHeader(name) {
+          return name.toLowerCase() === "content-type"
+            ? "application/json"
+            : null;
+        },
+        send(body) {
+          this.body = body;
+          this.status = 200;
+          this.responseText = JSON.stringify({
+            access_token: "xhr-access",
+            refresh_token: "xhr-refresh",
+            token_type: "Bearer",
+            expires_in: 3600,
+          });
+          queueMicrotask(() => this.onload());
+        },
+      };
+      return xhr;
+    },
+    storage,
+    transactionStorage,
+    clock: () => 50_000,
+    cryptoImpl: webcrypto,
+    locationImpl: { origin: "http://127.0.0.1:5173" },
+    historyImpl: { replaceState() {} },
+  });
+
+  const state = new URL(await auth.createAuthorizationUrl()).searchParams.get("state");
+  const result = await auth.handleCallback({
+    url: `http://127.0.0.1:5173/?code=auth-code&state=${state}`,
+    cleanup: false,
+  });
+
+  assert.equal(result.tokens.accessToken, "xhr-access");
+  assert.equal(xhr.method, "POST");
+  assert.equal(xhr.url, "https://accounts.spotify.com/api/token");
+  assert.deepEqual(xhr.header, [
+    "Content-Type",
+    "application/x-www-form-urlencoded",
+  ]);
+  assert.equal(new URLSearchParams(xhr.body).get("code_verifier")?.length, 64);
+  assert.equal(auth.hasSession(), true);
+});
+
+test("SpotifyAuth preserves the verifier when both browser transports fail", async () => {
+  const storage = new MemoryStorage();
+  const transactionStorage = new MemoryStorage();
+  const auth = new SpotifyAuth({
+    clientId: "client-id",
+    redirectUri: "http://127.0.0.1:5173/",
+    fetchImpl: async () => {
+      throw new TypeError("Failed to fetch");
+    },
+    xhrFactory: () => ({
+      open() {},
+      setRequestHeader() {},
+      send() {
+        queueMicrotask(() => this.onerror());
+      },
+    }),
+    storage,
+    transactionStorage,
+    clock: () => 75_000,
+    cryptoImpl: webcrypto,
+    locationImpl: { origin: "http://127.0.0.1:5173" },
+    historyImpl: { replaceState() {} },
+  });
+
+  const state = new URL(await auth.createAuthorizationUrl()).searchParams.get("state");
+  await assert.rejects(
+    auth.handleCallback({
+      url: `http://127.0.0.1:5173/?code=auth-code&state=${state}`,
+      cleanup: false,
+    }),
+    (error) =>
+      error instanceof SpotifyAuthError &&
+      error.code === "token_network_error" &&
+      error.details?.transport === "fetch+xmlhttprequest" &&
+      error.details?.fetchFailure?.name === "TypeError" &&
+      error.details?.xhrFailure?.name === "TypeError",
+  );
+  assert.equal(auth.readTransaction(state)?.state, state);
+});
+
 test("SpotifyAuth validates callback state, exchanges tokens, and cleans OAuth parameters", async () => {
   const now = 10_000;
   const storage = new MemoryStorage();

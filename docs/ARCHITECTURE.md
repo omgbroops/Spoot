@@ -41,9 +41,12 @@ popup passes its callback URL to that original tab with direct `postMessage`
 and a `BroadcastChannel` fallback if the cross-site round trip severed
 `window.opener`. Only the tab that owns the callback state accepts a broadcast.
 Its original `SpotifyAuth` instance validates state and exchanges the code
-using the verifier it created. The popup closes only after a successful result
-for its exact state. Direct callback fallbacks remove authorization parameters
-with `history.replaceState`.
+using the verifier it created. The token exchange follows Spotify's documented
+form request through Fetch, with an `XMLHttpRequest` fallback for fetch-only
+browser interception. A failure before either transport receives an HTTP
+response retains the verifier for an explicit retry. The popup closes after
+the opener reports the result for its exact state. Direct callback fallbacks
+remove authorization parameters with `history.replaceState`.
 Access-token refresh begins shortly before expiry and concurrent callers share
 one in-flight refresh promise. A rejected `invalid_grant` clears the unusable
 grant and returns the UI to authorization. Both the API client and

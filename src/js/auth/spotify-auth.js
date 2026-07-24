@@ -23,6 +23,39 @@ function clockNow(clock) {
   return typeof clock?.now === "function" ? clock.now() : clock();
 }
 
+function defaultXhrFactory() {
+  return typeof globalThis.XMLHttpRequest === "function"
+    ? () => new globalThis.XMLHttpRequest()
+    : null;
+}
+
+function safeTransportFailure(error) {
+  return {
+    name: error?.name || "Error",
+    message: error?.message || "Unknown transport failure.",
+  };
+}
+
+function responseFromXhr(xhr) {
+  const status = Number(xhr.status) || 0;
+  const body = typeof xhr.responseText === "string" ? xhr.responseText : "";
+  return {
+    status,
+    ok: status >= 200 && status < 300,
+    headers: {
+      get(name) {
+        return xhr.getResponseHeader?.(name) || "";
+      },
+    },
+    async json() {
+      return JSON.parse(body);
+    },
+    async text() {
+      return body;
+    },
+  };
+}
+
 function defaultTransactionStorage(fallback) {
   try {
     return globalThis.sessionStorage ?? fallback;
@@ -133,6 +166,7 @@ export class SpotifyAuth {
     redirectUri,
     scopes = [],
     fetchImpl = globalThis.fetch,
+    xhrFactory = defaultXhrFactory(),
     storage = globalThis.localStorage,
     transactionStorage,
     tokenStore,
@@ -157,6 +191,9 @@ export class SpotifyAuth {
     if (typeof fetchImpl !== "function") {
       throw new TypeError("SpotifyAuth requires a fetch implementation.");
     }
+    if (xhrFactory !== null && typeof xhrFactory !== "function") {
+      throw new TypeError("SpotifyAuth requires an XMLHttpRequest factory or null.");
+    }
     if (!Number.isInteger(maxPendingTransactions) || maxPendingTransactions < 1) {
       throw new TypeError("SpotifyAuth requires at least one pending OAuth transaction slot.");
     }
@@ -165,6 +202,7 @@ export class SpotifyAuth {
     this.redirectUri = redirectUri;
     this.scopes = [...new Set(scopes.filter(Boolean).map(String))];
     this.fetch = fetchImpl;
+    this.xhrFactory = xhrFactory;
     this.clock = clock;
     this.crypto = cryptoImpl;
     this.location = locationImpl;
@@ -319,6 +357,7 @@ export class SpotifyAuth {
     const handled = Boolean(code || oauthError);
     if (!handled) return { handled: false, tokens: null };
 
+    let preserveTransaction = false;
     try {
       const transactions = this.readTransactions();
       const transaction = typeof receivedState === "string" && receivedState
@@ -363,8 +402,13 @@ export class SpotifyAuth {
         transaction.verifier,
       );
       return { handled: true, tokens };
+    } catch (error) {
+      preserveTransaction = error?.code === "token_network_error";
+      throw error;
     } finally {
-      if (receivedState) this.clearTransaction(receivedState);
+      if (receivedState && !preserveTransaction) {
+        this.clearTransaction(receivedState);
+      }
       if (cleanup) this.cleanupCallbackUrl(url);
     }
   }
@@ -392,18 +436,28 @@ export class SpotifyAuth {
   }
 
   async requestToken(parameters) {
+    const body = new URLSearchParams(parameters);
     let response;
     try {
       response = await this.fetch(this.tokenEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams(parameters),
+        body,
       });
-    } catch (cause) {
-      throw new SpotifyAuthError("Could not reach Spotify authorization.", {
-        code: "token_network_error",
-        cause,
-      });
+    } catch (fetchCause) {
+      try {
+        response = await this.requestTokenWithXhr(body);
+      } catch (xhrCause) {
+        throw new SpotifyAuthError("Could not reach Spotify authorization.", {
+          code: "token_network_error",
+          cause: xhrCause,
+          details: {
+            transport: "fetch+xmlhttprequest",
+            fetchFailure: safeTransportFailure(fetchCause),
+            xhrFailure: safeTransportFailure(xhrCause),
+          },
+        });
+      }
     }
 
     const payload = await readTokenResponse(response);
@@ -415,6 +469,52 @@ export class SpotifyAuth {
       });
     }
     return payload;
+  }
+
+  requestTokenWithXhr(body) {
+    if (!this.xhrFactory) {
+      return Promise.reject(
+        new TypeError("XMLHttpRequest is unavailable in this environment."),
+      );
+    }
+
+    return new Promise((resolve, reject) => {
+      let xhr;
+      try {
+        xhr = this.xhrFactory();
+        xhr.open("POST", this.tokenEndpoint, true);
+        xhr.setRequestHeader(
+          "Content-Type",
+          "application/x-www-form-urlencoded",
+        );
+      } catch (error) {
+        reject(error);
+        return;
+      }
+
+      xhr.onload = () => {
+        if (Number(xhr.status) === 0) {
+          reject(new TypeError("XMLHttpRequest returned no HTTP status."));
+          return;
+        }
+        resolve(responseFromXhr(xhr));
+      };
+      xhr.onerror = () => reject(
+        new TypeError("XMLHttpRequest could not reach Spotify."),
+      );
+      xhr.onabort = () => reject(
+        new DOMException("Spotify token request was aborted.", "AbortError"),
+      );
+      xhr.ontimeout = () => reject(
+        new DOMException("Spotify token request timed out.", "TimeoutError"),
+      );
+
+      try {
+        xhr.send(body.toString());
+      } catch (error) {
+        reject(error);
+      }
+    });
   }
 
   getTokenSnapshot() {

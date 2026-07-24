@@ -235,6 +235,16 @@ same developer account; see Spotify's [Web API quota update](https://developer.s
 Capture the status, safe error reason, action attempted, and approximate time,
 but never a Bearer token.
 
+### Token request was blocked
+
+Spool first uses the browser Fetch API for Spotify's documented PKCE token
+request, then retries through `XMLHttpRequest` if Fetch was intercepted before
+an HTTP response arrived. If both browser transports fail, Spool retains the
+short-lived verifier so **Retry** can repeat the exchange after
+`accounts.spotify.com` is allowed in the browser, extension, VPN, or DNS
+filter. The safe console diagnostic reports transport names only; do not paste
+the callback URL, authorization code, verifier, or token values.
+
 ### SDK is absent, not ready, or silent
 
 - Confirm the browser supports EME/protected content and that Spotify playback
