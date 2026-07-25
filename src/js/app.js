@@ -15,24 +15,24 @@ import {
   AUDIO_EQ_PRESETS,
   createAudioEffectsController,
 } from "./audio/audio-effects.js";
-import { SpotifyApiClient, SpotifyApiError } from "./spotify/api-client.js";
+import { SpotifyApiClient, SpotifyApiError } from "./spotify/api-client.js?v=20260724-command2";
 import { SpotifyPlaybackSdk } from "./spotify/playback-sdk.js";
-import { PlaybackController } from "./spotify/playback-controller.js";
+import { PlaybackController } from "./spotify/playback-controller.js?v=20260724-command2";
 import { SpotifyQueueService } from "./spotify/queue-service.js";
 import { SpotifyLibraryService } from "./spotify/library-service.js";
-import { SpotifySearchService } from "./spotify/search-service.js";
-import { SpotifyAlbumService } from "./spotify/album-service.js";
-import { SpotifyArtistService } from "./spotify/artist-service.js";
-import { SpotifyTrackService } from "./spotify/track-service.js";
-import { SpotifyPlaylistService } from "./spotify/playlist-service.js";
+import { SpotifySearchService } from "./spotify/search-service.js?v=20260724-command2";
+import { SpotifyAlbumService } from "./spotify/album-service.js?v=20260724-command2";
+import { SpotifyArtistService } from "./spotify/artist-service.js?v=20260724-command2";
+import { SpotifyTrackService } from "./spotify/track-service.js?v=20260724-command2";
+import { SpotifyPlaylistService } from "./spotify/playlist-service.js?v=20260724-command2";
 import { LyricsService } from "./lyrics/lyrics-service.js";
-import { MockPlaybackController } from "./mock/mock-playback-controller.js";
+import { MockPlaybackController } from "./mock/mock-playback-controller.js?v=20260724-command2";
 import { MockLibraryService } from "./mock/mock-library-service.js";
-import { MockSearchService } from "./mock/mock-search-service.js";
-import { MockAlbumService } from "./mock/mock-album-service.js";
-import { MockArtistService } from "./mock/mock-artist-service.js";
-import { MockTrackService } from "./mock/mock-track-service.js";
-import { MockPlaylistService } from "./mock/mock-playlist-service.js";
+import { MockSearchService } from "./mock/mock-search-service.js?v=20260724-command2";
+import { MockAlbumService } from "./mock/mock-album-service.js?v=20260724-command2";
+import { MockArtistService } from "./mock/mock-artist-service.js?v=20260724-command2";
+import { MockTrackService } from "./mock/mock-track-service.js?v=20260724-command2";
+import { MockPlaylistService } from "./mock/mock-playlist-service.js?v=20260724-command2";
 import { MockLyricsService } from "./mock/mock-lyrics-service.js";
 import { getElements } from "./ui/elements.js";
 import {
@@ -46,7 +46,7 @@ import {
   renderLibraryDetail,
   renderLibrarySources,
   setupLibrary,
-} from "./ui/library.js";
+} from "./ui/library.js?v=20260724-command2";
 import {
   animateSearchContent,
   focusSearch,
@@ -54,11 +54,11 @@ import {
   renderSearch,
   setSearchChrome,
   setupSearch,
-} from "./ui/search.js";
-import { renderAlbum, setupAlbum } from "./ui/album.js";
-import { renderArtist, setupArtist } from "./ui/artist.js";
-import { renderTrack, setupTrack } from "./ui/track.js";
-import { renderPlaylist } from "./ui/playlist.js";
+} from "./ui/search.js?v=20260724-command2";
+import { renderAlbum, setupAlbum } from "./ui/album.js?v=20260724-command2";
+import { renderArtist, setupArtist } from "./ui/artist.js?v=20260724-command2";
+import { renderTrack, setupTrack } from "./ui/track.js?v=20260724-command2";
+import { renderPlaylist } from "./ui/playlist.js?v=20260724-command2";
 import { renderLyrics, setupLyrics, updateLyricsPosition } from "./ui/lyrics.js";
 import { renderDevicePicker, setupDevicePicker } from "./ui/device-picker.js";
 import {
@@ -103,7 +103,7 @@ import {
   openCommandPalette,
   parseSeekArgument,
   setupCommandPalette,
-} from "./ui/command-palette.js";
+} from "./ui/command-palette.js?v=20260724-command2";
 
 const UI_PREFERENCES_KEY = "spool.ui.preferences";
 const OAUTH_POPUP_NAME = "spool-spotify-auth";
