@@ -115,8 +115,8 @@ function createApi() {
     },
     async startPlayback(options) { calls.push(["start", options]); },
     async pausePlayback() {},
-    async skipPrevious() {},
-    async skipNext() {},
+    async skipPrevious() { calls.push("skip-previous"); },
+    async skipNext() { calls.push("skip-next"); },
     async seek() {},
   };
 }
@@ -294,7 +294,7 @@ test("controller lists devices, transfers externally, plays a queue song in Spoo
   assert.ok(sdk.calls.some((call) => Array.isArray(call) && call[0] === "set-volume" && call[1] === 0.35));
 });
 
-test("playlist playback keeps its context and queue clicks reposition it with one request", async () => {
+test("playlist playback keeps its context while queue clicks advance Spotify's real queue", async () => {
   const sdk = new FakeSdk();
   const api = createApi();
   const queuedTracks = ["track-2", "track-3", "track-4"].map((id) => ({
@@ -330,24 +330,16 @@ test("playlist playback keeps its context and queue clicks reposition it with on
   });
   assert.equal(contextualStart[1].uris, undefined);
 
-  controller.playbackState = {
-    ...controller.playbackState,
-    context: { type: "playlist", uri: "spotify:playlist:playlist-1" },
-  };
   const startsBeforeQueueClick = api.calls.filter((call) => Array.isArray(call) && call[0] === "start").length;
   await controller.playQueueItem({ uri: "spotify:track:track-4", index: 2 });
-  const starts = api.calls.filter((call) => Array.isArray(call) && call[0] === "start");
-  assert.equal(starts.length, startsBeforeQueueClick + 1);
-  assert.deepEqual(starts.at(-1)[1], {
-    deviceId: "spool-device",
-    contextUri: "spotify:playlist:playlist-1",
-    offset: { uri: "spotify:track:track-4" },
-    positionMs: 0,
-  });
-  assert.equal(sdk.calls.filter((call) => call === "next").length, 0);
+  assert.equal(
+    api.calls.filter((call) => Array.isArray(call) && call[0] === "start").length,
+    startsBeforeQueueClick,
+  );
+  assert.equal(sdk.calls.filter((call) => call === "next").length, 3);
 });
 
-test("album recommendations start from the visible queue tail without an invalid album offset", async () => {
+test("album recommendation clicks never replace autoplay with a finite URI tail", async () => {
   const sdk = new FakeSdk();
   const api = createApi();
   const albumUri = "spotify:album:album-1";
@@ -372,26 +364,13 @@ test("album recommendations start from the visible queue tail without an invalid
 
   await controller.playQueueItem({ uri: "spotify:track:recommendation-1", index: 1 });
 
-  const starts = api.calls.filter((call) => Array.isArray(call) && call[0] === "start");
-  assert.deepEqual(starts.at(-1)[1], {
-    deviceId: "spool-device",
-    uris: ["spotify:track:recommendation-1", "spotify:track:recommendation-2"],
-    positionMs: 0,
-  });
-  assert.equal(sdk.calls.filter((call) => call === "next").length, 0);
+  assert.equal(api.calls.filter((call) => Array.isArray(call) && call[0] === "start").length, 0);
+  assert.equal(sdk.calls.filter((call) => call === "next").length, 2);
 });
 
-test("playlist autoplay falls back once when Spotify rejects a recommendation as a context offset", async () => {
+test("queue jumps use Spotify skip-next when the SDK is temporarily unavailable", async () => {
   const sdk = new FakeSdk();
   const api = createApi();
-  api.startPlayback = async (options) => {
-    api.calls.push(["start", options]);
-    if (options.contextUri) {
-      const error = new Error("That track is outside the playlist context.");
-      error.status = 404;
-      throw error;
-    }
-  };
   const queue = ["recommendation-1", "recommendation-2"].map((id) => ({
     ...API_TRACK,
     id,
@@ -406,27 +385,12 @@ test("playlist autoplay falls back once when Spotify rejects a recommendation as
   });
   sdk.becomeReady();
   await new Promise((resolve) => setImmediate(resolve));
-  controller.playbackState = {
-    ...controller.playbackState,
-    context: { type: "playlist", uri: "spotify:playlist:playlist-1" },
-  };
+  sdk.ready = false;
 
   await controller.playQueueItem({ uri: "spotify:track:recommendation-1", index: 0 });
 
-  const starts = api.calls.filter((call) => Array.isArray(call) && call[0] === "start");
-  assert.equal(starts.length, 2);
-  assert.deepEqual(starts[0][1], {
-    deviceId: "spool-device",
-    contextUri: "spotify:playlist:playlist-1",
-    offset: { uri: "spotify:track:recommendation-1" },
-    positionMs: 0,
-  });
-  assert.deepEqual(starts[1][1], {
-    deviceId: "spool-device",
-    uris: ["spotify:track:recommendation-1", "spotify:track:recommendation-2"],
-    positionMs: 0,
-  });
-  assert.equal(sdk.calls.filter((call) => call === "next").length, 0);
+  assert.equal(api.calls.filter((call) => Array.isArray(call) && call[0] === "start").length, 0);
+  assert.equal(api.calls.filter((call) => call === "skip-next").length, 1);
 });
 
 test("disconnect during connect cannot restart the progress loop", async () => {

@@ -119,14 +119,15 @@
 
   <div class="scrim" id="scrim"></div>
 
-  <section class="modal glass" id="modal-search" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="search-title">
-    <div class="modal-head" data-drag-handle><div class="modal-title" id="search-title">Search</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
-    <div class="modal-body search-body">
-      <form class="search-form" id="search-form" role="search">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+  <section class="modal glass search-modal" id="modal-search" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Search Spotify">
+    <div class="search-shell">
+      <form class="search-form glass" id="search-form" role="search">
+        <button class="search-back" id="search-back" type="button" aria-label="Back" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m15 18-6-6 6-6"/></svg></button>
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
         <input id="search-input" type="search" autocomplete="off" spellcheck="false" placeholder="Artists, songs, albums, playlists" aria-label="Search Spotify">
+        <button class="search-close" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </form>
-      <div class="search-results" id="search-results" aria-live="polite"><div class="empty search-message">Search Spotify for songs, artists, albums, and playlists.</div></div>
+      <div class="search-results" id="search-results" aria-live="polite"></div>
     </div>
   </section>
 
@@ -215,6 +216,7 @@
         <div class="kbd"><b>⇧</b><b>←</b><span>/</span><b>→</b></div><div class="kbd-act">Previous / next track</div>
         <div class="kbd"><b>Q</b></div><div class="kbd-act">Up Next</div>
         <div class="kbd"><b>/</b></div><div class="kbd-act">Search Spotify</div>
+        <div class="kbd"><b>Ctrl</b><b>⇧</b><b>/</b></div><div class="kbd-act">Command line</div>
         <div class="kbd"><b>F</b></div><div class="kbd-act">Immersive view</div>
         <div class="kbd"><b>Esc</b></div><div class="kbd-act">Close</div>
       </div>
@@ -267,8 +269,17 @@
     </div>
   </section>
 
+  <section class="command-palette" id="command-palette" role="dialog" aria-modal="false" aria-hidden="true" aria-label="Spool command line">
+    <form id="command-form" autocomplete="off">
+      <span class="command-prompt" aria-hidden="true">›</span>
+      <input id="command-input" type="text" autocomplete="off" spellcheck="false" placeholder="Type a command…" aria-label="Type a Spool command">
+      <kbd>Esc</kbd>
+    </form>
+    <div class="command-output" id="command-output" aria-live="polite"></div>
+  </section>
+
   <div id="blank" aria-hidden="true"></div>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./src/js/app.js?v=20260724-details1"></script>
+  <script type="module" src="./src/js/app.js?v=20260724-command1"></script>
 </body>
 </html>

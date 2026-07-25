@@ -93,6 +93,7 @@ export function normalizeSearchResponse(payload) {
       contextUri: playlist.uri ?? null,
       externalUrl: externalUrl(playlist),
       playable: Boolean(playlist.uri),
+      browseable: typeof playlist.id === "string" && Boolean(playlist.id),
     };
   });
 

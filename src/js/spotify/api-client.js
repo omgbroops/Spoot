@@ -352,6 +352,13 @@ export class SpotifyApiClient {
     });
   }
 
+  getPlaylist(playlistId, { market, signal } = {}) {
+    return this.request(`playlists/${assertSpotifyId(playlistId, "Playlist")}`, {
+      query: { market },
+      signal,
+    });
+  }
+
   getPlaylistItems(
     playlistId,
     {

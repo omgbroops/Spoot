@@ -26,11 +26,19 @@ function nextOffset(page, fallbackOffset) {
 export function normalizeAlbum(album) {
   if (!album || typeof album !== "object") return null;
   const artistNames = names(album.artists);
+  const artists = Array.isArray(album.artists)
+    ? album.artists.filter((artist) => artist?.name).map((artist) => ({
+        id: typeof artist.id === "string" ? artist.id : null,
+        name: artist.name,
+        uri: typeof artist.uri === "string" ? artist.uri : null,
+      }))
+    : [];
   return {
     id: typeof album.id === "string" ? album.id : null,
     uri: typeof album.uri === "string" ? album.uri : null,
     name: album.name || "Untitled album",
     type: album.album_type || "album",
+    artists,
     artistNames,
     artist: artistNames.join(", ") || "Unknown artist",
     artworkUrl: firstImage(album.images),

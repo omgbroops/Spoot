@@ -153,10 +153,9 @@ export class MockPlaybackController extends Emitter {
     this.emit("state", this.playbackState);
   }
 
-  async cycleRepeat() {
+  async setRepeat(repeatMode) {
+    if (!REPEAT_ORDER.includes(repeatMode)) throw new TypeError("Mock repeat mode is invalid.");
     if (!this.playbackState) return "off";
-    const index = REPEAT_ORDER.indexOf(this.playbackState.repeatMode);
-    const repeatMode = REPEAT_ORDER[(index + 1) % REPEAT_ORDER.length];
     this.playbackState = {
       ...this.playbackState,
       repeatMode,
@@ -164,6 +163,12 @@ export class MockPlaybackController extends Emitter {
     };
     this.emit("state", this.playbackState);
     return repeatMode;
+  }
+
+  async cycleRepeat() {
+    if (!this.playbackState) return "off";
+    const index = REPEAT_ORDER.indexOf(this.playbackState.repeatMode);
+    return this.setRepeat(REPEAT_ORDER[(index + 1) % REPEAT_ORDER.length]);
   }
 
   async refreshState() {

@@ -232,6 +232,7 @@ test("library, album, and device methods use current Spotify endpoints and pagin
 
   await client.getCurrentUserProfile();
   await client.getCurrentUserPlaylists({ limit: 50, offset: 100 });
+  await client.getPlaylist("AbC123", { market: "US" });
   await client.getPlaylistItems("AbC123", { limit: 25, offset: 50 });
   await client.getSavedTracks({ limit: 10, offset: 20, market: "US" });
   await client.getAlbum("Album123", { market: "US" });
@@ -243,18 +244,20 @@ test("library, album, and device methods use current Spotify endpoints and pagin
   assert.equal(requests[1].url.pathname, "/v1/me/playlists");
   assert.equal(requests[1].url.searchParams.get("limit"), "50");
   assert.equal(requests[1].url.searchParams.get("offset"), "100");
-  assert.equal(requests[2].url.pathname, "/v1/playlists/AbC123/items");
-  assert.equal(requests[2].url.searchParams.get("additional_types"), "track,episode");
-  assert.equal(requests[3].url.pathname, "/v1/me/tracks");
-  assert.equal(requests[3].url.searchParams.get("market"), "US");
-  assert.equal(requests[4].url.pathname, "/v1/albums/Album123");
+  assert.equal(requests[2].url.pathname, "/v1/playlists/AbC123");
+  assert.equal(requests[2].url.searchParams.get("market"), "US");
+  assert.equal(requests[3].url.pathname, "/v1/playlists/AbC123/items");
+  assert.equal(requests[3].url.searchParams.get("additional_types"), "track,episode");
+  assert.equal(requests[4].url.pathname, "/v1/me/tracks");
   assert.equal(requests[4].url.searchParams.get("market"), "US");
-  assert.equal(requests[5].url.pathname, "/v1/albums/Album123/tracks");
-  assert.equal(requests[5].url.searchParams.get("limit"), "25");
-  assert.equal(requests[5].url.searchParams.get("offset"), "50");
-  assert.equal(requests[6].url.pathname, "/v1/me/player/devices");
-  assert.equal(requests[7].options.method, "PUT");
-  assert.equal(requests[7].url.searchParams.get("volume_percent"), "35");
+  assert.equal(requests[5].url.pathname, "/v1/albums/Album123");
+  assert.equal(requests[5].url.searchParams.get("market"), "US");
+  assert.equal(requests[6].url.pathname, "/v1/albums/Album123/tracks");
+  assert.equal(requests[6].url.searchParams.get("limit"), "25");
+  assert.equal(requests[6].url.searchParams.get("offset"), "50");
+  assert.equal(requests[7].url.pathname, "/v1/me/player/devices");
+  assert.equal(requests[8].options.method, "PUT");
+  assert.equal(requests[8].url.searchParams.get("volume_percent"), "35");
 });
 
 test("search and contextual playback use Spotify's documented request shapes", async () => {

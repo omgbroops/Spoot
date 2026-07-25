@@ -9,105 +9,155 @@ const GROUPS = Object.freeze([
 
 let cleanup;
 
-export function setupSearch({ onQuery, onPlay, onOpenAlbum, onOpenArtist, onOpenTrack } = {}) {
+export function setupSearch({
+  onQuery,
+  onPlay,
+  onOpenAlbum,
+  onOpenArtist,
+  onOpenTrack,
+  onOpenPlaylist,
+  onBack,
+} = {}) {
   cleanup?.();
   const form = document.getElementById("search-form");
   const input = document.getElementById("search-input");
   const results = document.getElementById("search-results");
+  const back = document.getElementById("search-back");
   if (!form || !input || !results) return () => {};
-  let timer;
 
   const submit = (event) => {
-    event?.preventDefault();
-    clearTimeout(timer);
+    event.preventDefault();
     onQuery?.(input.value);
   };
-  const change = () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => onQuery?.(input.value), 280);
+  const goBack = (event) => {
+    event.preventDefault();
+    onBack?.();
   };
   const click = (event) => {
-    const album = event.target.closest("[data-search-open-album]");
+    const album = event.target.closest("[data-search-open-album], [data-catalog-open-album], [data-album-open]");
     if (album && !album.disabled) {
-      onOpenAlbum?.({ id: album.dataset.searchOpenAlbum });
+      onOpenAlbum?.({ id: album.dataset.searchOpenAlbum || album.dataset.catalogOpenAlbum || album.dataset.albumOpen });
       return;
     }
-    const artist = event.target.closest("[data-search-open-artist]");
+    const artist = event.target.closest("[data-search-open-artist], [data-catalog-open-artist], [data-album-open-artist], [data-track-open-artist], [data-playlist-open-artist]");
     if (artist && !artist.disabled) {
-      onOpenArtist?.({ id: artist.dataset.searchOpenArtist });
+      onOpenArtist?.({ id: artist.dataset.searchOpenArtist || artist.dataset.catalogOpenArtist || artist.dataset.albumOpenArtist || artist.dataset.trackOpenArtist || artist.dataset.playlistOpenArtist });
       return;
     }
-    const track = event.target.closest("[data-search-open-track]");
+    const track = event.target.closest("[data-search-open-track], [data-catalog-open-track]");
     if (track && !track.disabled) {
-      onOpenTrack?.({ id: track.dataset.searchOpenTrack });
+      onOpenTrack?.({ id: track.dataset.searchOpenTrack || track.dataset.catalogOpenTrack });
       return;
     }
-    const action = event.target.closest("[data-search-play]");
+    const playlist = event.target.closest("[data-search-open-playlist], [data-catalog-open-playlist]");
+    if (playlist && !playlist.disabled) {
+      onOpenPlaylist?.({ id: playlist.dataset.searchOpenPlaylist || playlist.dataset.catalogOpenPlaylist });
+      return;
+    }
+
+    const action = event.target.closest(
+      "[data-search-play], [data-album-play], [data-artist-play], [data-track-play], [data-playlist-play], [data-catalog-play]",
+    );
     if (!action || action.disabled) return;
+    const contextOnly = [
+      action.dataset.searchContextOnly,
+      action.dataset.albumContextOnly,
+      action.dataset.artistContextOnly,
+      action.dataset.playlistContextOnly,
+      action.dataset.catalogContextOnly,
+    ].includes("true");
+    const directUri = action.dataset.searchUri || action.dataset.albumPlay || action.dataset.artistPlay || action.dataset.trackPlay || action.dataset.playlistPlay || action.dataset.catalogPlay || null;
+    const contextUri = action.dataset.searchContext || action.dataset.albumContext || action.dataset.playlistContext || action.dataset.catalogContext || (action.dataset.artistContextOnly === "true" ? action.dataset.artistPlay : null) || null;
     onPlay?.({
-      uri: action.dataset.searchUri || null,
-      contextUri: action.dataset.searchContext || null,
-      contextOnly: action.dataset.searchContextOnly === "true",
+      uri: contextOnly ? null : directUri,
+      contextUri,
+      contextPosition: parseOptionalInteger(action.dataset.albumPosition || action.dataset.playlistPosition || action.dataset.catalogPosition),
+      contextOnly,
     });
   };
+
   form.addEventListener("submit", submit);
-  input.addEventListener("input", change);
+  back?.addEventListener("click", goBack);
   results.addEventListener("click", click);
   cleanup = () => {
-    clearTimeout(timer);
     form.removeEventListener("submit", submit);
-    input.removeEventListener("input", change);
+    back?.removeEventListener("click", goBack);
     results.removeEventListener("click", click);
     cleanup = undefined;
   };
   return cleanup;
 }
 
-export function focusSearch() {
-  requestAnimationFrame(() => document.getElementById("search-input")?.focus({ preventScroll: true }));
+export function focusSearch({ select = false } = {}) {
+  requestAnimationFrame(() => {
+    const input = document.getElementById("search-input");
+    input?.focus({ preventScroll: true });
+    if (select) input?.select();
+  });
 }
 
-export function renderSearch({ status = "idle", query = "", results, message } = {}) {
-  const container = document.getElementById("search-results");
+export function setSearchChrome({ expanded = false, canGoBack = false, query } = {}) {
+  const modal = document.getElementById("modal-search");
+  const back = document.getElementById("search-back");
+  const input = document.getElementById("search-input");
+  modal?.classList.toggle("has-results", Boolean(expanded));
+  if (back) back.hidden = !canGoBack;
+  if (input && query !== undefined && input.value !== query) input.value = query;
+}
+
+export function getSearchResultsContainer() {
+  return document.getElementById("search-results");
+}
+
+export function animateSearchContent(container = getSearchResultsContainer()) {
+  if (!container) return;
+  container.classList.remove("content-enter");
+  void container.offsetWidth;
+  container.classList.add("content-enter");
+}
+
+export function renderSearch({ status = "idle", query = "", results, message, animate = true } = {}) {
+  const container = getSearchResultsContainer();
   if (!container) return;
   container.replaceChildren();
   container.setAttribute("aria-busy", String(status === "loading"));
 
   if (status === "idle" || !String(query).trim()) {
-    container.append(searchMessage("Search Spotify for songs, artists, albums, and playlists."));
+    setSearchChrome({ expanded: false, canGoBack: false, query });
     return;
   }
+  setSearchChrome({ expanded: true, canGoBack: false, query });
   if (status === "loading") {
-    container.append(searchMessage(`Searching for “${query.trim()}”…`));
-    return;
-  }
-  if (status === "error") {
-    container.append(searchMessage(message || "Spotify search is temporarily unavailable."));
-    return;
-  }
-  if (!results?.total) {
+    container.append(searchMessage(`Searching for “${query.trim()}”…`, "loading"));
+  } else if (status === "error") {
+    container.append(searchMessage(message || "Spotify search is temporarily unavailable.", "error"));
+  } else if (!results?.total) {
     container.append(searchMessage(`No Spotify results for “${query.trim()}”.`));
-    return;
+  } else {
+    for (const [key, label] of GROUPS) {
+      const items = results[key] ?? [];
+      if (!items.length) continue;
+      const section = document.createElement("section");
+      const heading = document.createElement("h2");
+      const list = document.createElement("div");
+      section.className = "search-group";
+      heading.textContent = label;
+      list.className = "search-list";
+      items.forEach((item, index) => {
+        const row = searchRow(item);
+        row.style.setProperty("--enter-index", index);
+        list.append(row);
+      });
+      section.append(heading, list);
+      container.append(section);
+    }
   }
-
-  for (const [key, label] of GROUPS) {
-    const items = results[key] ?? [];
-    if (!items.length) continue;
-    const section = document.createElement("section");
-    const heading = document.createElement("h2");
-    const list = document.createElement("div");
-    section.className = "search-group";
-    heading.textContent = label;
-    list.className = "search-list";
-    items.forEach((item) => list.append(searchRow(item)));
-    section.append(heading, list);
-    container.append(section);
-  }
+  if (animate) animateSearchContent(container);
 }
 
 function searchRow(item) {
   const row = document.createElement("div");
-  const play = document.createElement("button");
+  const main = document.createElement("button");
   const image = document.createElement("img");
   const copy = document.createElement("span");
   const title = document.createElement("strong");
@@ -117,25 +167,24 @@ function searchRow(item) {
   const opensAlbum = item.type === "album" && item.browseable !== false && Boolean(item.id);
   const opensArtist = item.type === "artist" && item.browseable !== false && Boolean(item.id);
   const opensTrack = item.type === "track" && item.browseable !== false && Boolean(item.id);
-  const opensDetail = opensAlbum || opensArtist || opensTrack;
+  const opensPlaylist = item.type === "playlist" && item.browseable !== false && Boolean(item.id);
+  const opensDetail = opensAlbum || opensArtist || opensTrack || opensPlaylist;
   const interactive = opensDetail || item.playable;
   row.className = `search-result search-${item.type}${interactive ? "" : " unavailable"}`;
-  play.type = "button";
-  play.className = "search-result-main";
-  play.disabled = !interactive;
-  if (opensAlbum) {
-    play.dataset.searchOpenAlbum = item.id;
-  } else if (opensArtist) {
-    play.dataset.searchOpenArtist = item.id;
-  } else if (opensTrack) {
-    play.dataset.searchOpenTrack = item.id;
-  } else {
-    play.dataset.searchPlay = "";
-    if (item.uri) play.dataset.searchUri = item.uri;
-    if (item.contextUri) play.dataset.searchContext = item.contextUri;
-    play.dataset.searchContextOnly = String(item.type !== "track");
+  main.type = "button";
+  main.className = "search-result-main";
+  main.disabled = !interactive;
+  if (opensAlbum) main.dataset.searchOpenAlbum = item.id;
+  else if (opensArtist) main.dataset.searchOpenArtist = item.id;
+  else if (opensTrack) main.dataset.searchOpenTrack = item.id;
+  else if (opensPlaylist) main.dataset.searchOpenPlaylist = item.id;
+  else {
+    main.dataset.searchPlay = "";
+    if (item.uri) main.dataset.searchUri = item.uri;
+    if (item.contextUri) main.dataset.searchContext = item.contextUri;
+    main.dataset.searchContextOnly = String(item.type !== "track");
   }
-  play.setAttribute("aria-label", interactive
+  main.setAttribute("aria-label", interactive
     ? `${opensDetail ? "Open" : "Play"} ${item.title}`
     : `${item.title} is unavailable`);
 
@@ -149,8 +198,8 @@ function searchRow(item) {
   badge.className = "search-type";
   badge.textContent = item.type === "track" ? "Song" : item.type[0].toUpperCase() + item.type.slice(1);
   copy.append(title, subtitle);
-  play.append(image, copy, badge, resultIcon(opensDetail));
-  row.append(play);
+  main.append(image, copy, badge, resultIcon(opensDetail));
+  row.append(main);
 
   if (item.externalUrl) {
     const link = document.createElement("a");
@@ -175,9 +224,15 @@ function resultIcon(opensDetail = false) {
   return icon;
 }
 
-function searchMessage(text) {
+function searchMessage(text, state = "empty") {
   const empty = document.createElement("div");
-  empty.className = "empty search-message";
+  empty.className = `empty search-message search-message-${state}`;
   empty.textContent = text;
   return empty;
+}
+
+function parseOptionalInteger(value) {
+  if (value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
 }

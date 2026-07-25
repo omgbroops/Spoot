@@ -24,6 +24,7 @@ import { SpotifySearchService } from "./spotify/search-service.js";
 import { SpotifyAlbumService } from "./spotify/album-service.js";
 import { SpotifyArtistService } from "./spotify/artist-service.js";
 import { SpotifyTrackService } from "./spotify/track-service.js";
+import { SpotifyPlaylistService } from "./spotify/playlist-service.js";
 import { LyricsService } from "./lyrics/lyrics-service.js";
 import { MockPlaybackController } from "./mock/mock-playback-controller.js";
 import { MockLibraryService } from "./mock/mock-library-service.js";
@@ -31,6 +32,7 @@ import { MockSearchService } from "./mock/mock-search-service.js";
 import { MockAlbumService } from "./mock/mock-album-service.js";
 import { MockArtistService } from "./mock/mock-artist-service.js";
 import { MockTrackService } from "./mock/mock-track-service.js";
+import { MockPlaylistService } from "./mock/mock-playlist-service.js";
 import { MockLyricsService } from "./mock/mock-lyrics-service.js";
 import { getElements } from "./ui/elements.js";
 import {
@@ -45,10 +47,18 @@ import {
   renderLibrarySources,
   setupLibrary,
 } from "./ui/library.js";
-import { focusSearch, renderSearch, setupSearch } from "./ui/search.js";
+import {
+  animateSearchContent,
+  focusSearch,
+  getSearchResultsContainer,
+  renderSearch,
+  setSearchChrome,
+  setupSearch,
+} from "./ui/search.js";
 import { renderAlbum, setupAlbum } from "./ui/album.js";
 import { renderArtist, setupArtist } from "./ui/artist.js";
 import { renderTrack, setupTrack } from "./ui/track.js";
+import { renderPlaylist } from "./ui/playlist.js";
 import { renderLyrics, setupLyrics, updateLyricsPosition } from "./ui/lyrics.js";
 import { renderDevicePicker, setupDevicePicker } from "./ui/device-picker.js";
 import {
@@ -87,6 +97,13 @@ import {
   setupInactiveFeatures,
 } from "./ui/inactive-features.js";
 import { setupToast, showToast } from "./ui/toast.js";
+import {
+  closeCommandPalette,
+  isCommandPaletteOpen,
+  openCommandPalette,
+  parseSeekArgument,
+  setupCommandPalette,
+} from "./ui/command-palette.js";
 
 const UI_PREFERENCES_KEY = "spool.ui.preferences";
 const OAUTH_POPUP_NAME = "spool-spotify-auth";
@@ -112,6 +129,7 @@ let searchService;
 let albumService;
 let artistService;
 let trackService;
+let playlistService;
 let lyricsService;
 let connectionState = "not-configured";
 let currentPlayback = null;
@@ -140,6 +158,7 @@ let oauthPopup;
 let oauthCallbackInFlightState;
 let pendingOAuthCallback;
 let searchAbortController;
+let catalogAbortController;
 let libraryAbortController;
 let albumAbortController;
 let artistAbortController;
@@ -147,6 +166,9 @@ let trackAbortController;
 let lyricsAbortController;
 let currentLyricsTrackKey;
 let albumReturnModal = "modal-search";
+let searchView = { kind: "search", status: "idle", query: "", results: null, message: null };
+let catalogCurrent = searchView;
+let catalogHistory = [];
 const oauthChannel = createOAuthChannel();
 const audioEffects = createAudioEffectsController({
   onCaptureChange: () => renderSoundSettings(),
@@ -315,31 +337,41 @@ function setupUi() {
   setupLibrary({
     onSelectSource: openLibrarySource,
     onPlay: playTrackNow,
+    onPlaySource: playTrackNow,
+    onOpenAlbum: (selection) => openCatalogFromLibrary("album", selection),
+    onOpenArtist: (selection) => openCatalogFromLibrary("artist", selection),
     onBack: showLibrarySources,
     onLoadMore: loadMoreLibraryItems,
     onRefresh: () => refreshLibrary({ force: true }),
   });
+  // The original standalone detail modals remain functional for compatibility,
+  // but normal navigation now renders every catalog page beneath Search.
   setupAlbum({
     onPlay: playTrackNow,
+    onOpenArtist: (selection) => navigateCatalog("artist", selection),
     onBack: returnFromAlbum,
   });
   setupArtist({
     onPlay: playTrackNow,
-    onOpenAlbum: (selection) => openAlbumPage(selection, { returnModal: "modal-artist" }),
-    onBack: returnToSearch,
+    onOpenAlbum: (selection) => navigateCatalog("album", selection),
+    onBack: navigateCatalogBack,
   });
   setupTrack({
     onPlay: playTrackNow,
-    onOpenAlbum: (selection) => openAlbumPage(selection, { returnModal: "modal-track" }),
-    onBack: returnToSearch,
+    onOpenAlbum: (selection) => navigateCatalog("album", selection),
+    onOpenArtist: (selection) => navigateCatalog("artist", selection),
+    onBack: navigateCatalogBack,
   });
   setupSearch({
     onQuery: searchSpotify,
     onPlay: playTrackNow,
-    onOpenAlbum: openAlbumPage,
-    onOpenArtist: openArtistPage,
-    onOpenTrack: openTrackPage,
+    onOpenAlbum: (selection) => navigateCatalog("album", selection),
+    onOpenArtist: (selection) => navigateCatalog("artist", selection),
+    onOpenTrack: (selection) => navigateCatalog("track", selection),
+    onOpenPlaylist: (selection) => navigateCatalog("playlist", selection),
+    onBack: navigateCatalogBack,
   });
+  setupCommandPalette({ onCommand: executeCommand });
   setupMediaSession({
     onPlay: () => currentPlayback?.paused && runMediaCommand(() => controller?.togglePlay()),
     onPause: () => currentPlayback?.isPlaying && runMediaCommand(() => controller?.togglePlay()),
@@ -369,7 +401,10 @@ function setupUi() {
   });
   document.addEventListener("spool:modal-open", ({ detail }) => {
     if (detail?.id === "modal-library") refreshLibrary();
-    if (detail?.id === "modal-search") focusSearch();
+    if (detail?.id === "modal-search") {
+      renderCatalogCurrent({ animate: false });
+      focusSearch();
+    }
     if (detail?.id === "modal-settings") refreshDevices();
     if (detail?.id === "modal-eq") controller?.refreshVolume?.().catch(() => {});
   });
@@ -379,10 +414,6 @@ function setupUi() {
       selectedLibraryItems = [];
       selectedLibraryNextOffset = null;
       selectedLibraryDurationMs = null;
-    }
-    if (detail?.id === "modal-search") {
-      searchAbortController?.abort();
-      searchAbortController = undefined;
     }
     if (detail?.id === "modal-album") {
       albumAbortController?.abort();
@@ -408,6 +439,7 @@ async function initializeMockMode() {
   albumService = new MockAlbumService();
   artistService = new MockArtistService();
   trackService = new MockTrackService();
+  playlistService = new MockPlaylistService();
   lyricsService = new MockLyricsService();
   bindController(controller);
   renderConnection("logged-in", {
@@ -452,6 +484,7 @@ function createLiveController() {
   albumService = new SpotifyAlbumService({ apiClient });
   artistService = new SpotifyArtistService({ apiClient });
   trackService = new SpotifyTrackService({ apiClient });
+  playlistService = new SpotifyPlaylistService({ apiClient });
   lyricsService = new LyricsService({
     onDiagnostic: (diagnostic) => console.debug("Lyrics provider skipped.", diagnostic),
   });
@@ -541,6 +574,10 @@ function renderPlayback(playback) {
   );
 
   document.title = playback?.title ? `${playback.title} — Spool` : "Spool";
+  if (selectedLibrarySource) renderSelectedLibrary();
+  if (catalogCurrent?.kind && catalogCurrent.kind !== "search" && isModalOpen("modal-search")) {
+    renderCatalogCurrent({ animate: false });
+  }
   updateAmbientLoop();
 }
 
@@ -916,6 +953,7 @@ async function logout() {
   albumService = undefined;
   artistService = undefined;
   trackService = undefined;
+  playlistService = undefined;
   lyricsService = undefined;
   auth?.logout();
   renderLoggedOut();
@@ -976,148 +1014,249 @@ async function playTrackNow(selection) {
 
 async function searchSpotify(query) {
   const normalizedQuery = String(query || "").trim();
-  searchAbortController?.abort();
-  searchAbortController = undefined;
-  if (!normalizedQuery) {
-    renderSearch();
+  if (
+    normalizedQuery &&
+    searchView.query === normalizedQuery &&
+    ["loading", "ready"].includes(searchView.status)
+  ) {
+    catalogHistory = [];
+    catalogCurrent = searchView;
+    renderCatalogCurrent({ animate: false });
     return;
   }
+  searchAbortController?.abort();
+  catalogAbortController?.abort();
+  searchAbortController = undefined;
+  catalogAbortController = undefined;
+  catalogHistory = [];
+  searchView = {
+    kind: "search",
+    status: normalizedQuery ? "loading" : "idle",
+    query: normalizedQuery,
+    results: null,
+    message: null,
+  };
+  catalogCurrent = searchView;
+  renderCatalogCurrent();
+  if (!normalizedQuery) return;
   if (!searchService) {
-    renderSearch({
+    searchView = {
+      ...searchView,
       status: "error",
-      query: normalizedQuery,
       message: "Log in to Spotify to search the catalog.",
-    });
+    };
+    catalogCurrent = searchView;
+    renderCatalogCurrent();
     return;
   }
 
   const request = new AbortController();
   searchAbortController = request;
-  renderSearch({ status: "loading", query: normalizedQuery });
   try {
     const results = await searchService.search(normalizedQuery, { signal: request.signal });
     if (searchAbortController !== request) return;
-    renderSearch({ status: "ready", query: normalizedQuery, results });
+    searchView = { ...searchView, status: "ready", results, message: null };
+    catalogCurrent = searchView;
+    renderCatalogCurrent();
   } catch (error) {
     if (error?.name === "AbortError" || searchAbortController !== request) return;
     console.warn("Spotify search failed.", safeDiagnostic(error, "search"));
-    renderSearch({ status: "error", query: normalizedQuery, message: humanizeSearchError(error) });
+    searchView = {
+      ...searchView,
+      status: "error",
+      message: humanizeSearchError(error),
+    };
+    catalogCurrent = searchView;
+    renderCatalogCurrent();
   } finally {
     if (searchAbortController === request) searchAbortController = undefined;
   }
 }
 
-async function openAlbumPage(selection, { returnModal = "modal-search" } = {}) {
-  const albumId = typeof selection === "string" ? selection : selection?.id;
-  albumReturnModal = returnModal;
-  openModal("modal-album");
-  albumAbortController?.abort();
-  albumAbortController = undefined;
-  if (!albumService || !albumId) {
-    renderAlbum({
-      status: "error",
-      message: albumService
-        ? "Spotify did not return a usable release identifier."
-        : "Log in to Spotify to open releases.",
-    });
+function openCatalogFromLibrary(kind, selection) {
+  catalogHistory = [{ kind: "library" }];
+  catalogCurrent = createCatalogEntry(kind, selection);
+  openModal("modal-search");
+  loadCatalogEntry(catalogCurrent);
+}
+
+function navigateCatalog(kind, selection) {
+  const entry = createCatalogEntry(kind, selection);
+  if (!entry.id) {
+    showToast("Spotify did not return a usable page identifier.");
     return;
   }
+  if (catalogCurrent) catalogHistory.push(snapshotCatalogEntry(catalogCurrent));
+  catalogCurrent = entry;
+  openModal("modal-search");
+  loadCatalogEntry(entry);
+}
 
-  const request = new AbortController();
-  albumAbortController = request;
-  renderAlbum({ status: "loading" });
-  try {
-    const result = await albumService.loadAlbum(albumId, { signal: request.signal });
-    if (albumAbortController !== request) return;
-    renderAlbum({ status: "ready", result });
-  } catch (error) {
-    if (error?.name === "AbortError" || albumAbortController !== request) return;
-    console.warn("Spotify release failed to load.", safeDiagnostic(error, "album"));
-    renderAlbum({ status: "error", message: humanizeAlbumError(error) });
-  } finally {
-    if (albumAbortController === request) albumAbortController = undefined;
+function navigateCatalogBack() {
+  catalogAbortController?.abort();
+  catalogAbortController = undefined;
+  const previous = catalogHistory.pop();
+  if (!previous) {
+    catalogCurrent = searchView;
+    renderCatalogCurrent();
+    focusSearch();
+    return;
+  }
+  if (previous.kind === "library") {
+    catalogHistory = [];
+    catalogCurrent = searchView;
+    openModal("modal-library");
+    renderSelectedLibrary();
+    return;
+  }
+  catalogCurrent = previous;
+  openModal("modal-search");
+  if (previous.status === "ready" || previous.status === "error") {
+    renderCatalogCurrent();
+  } else {
+    loadCatalogEntry(previous);
   }
 }
 
-async function openArtistPage(selection) {
-  const artistId = typeof selection === "string" ? selection : selection?.id;
-  openModal("modal-artist");
-  artistAbortController?.abort();
-  artistAbortController = undefined;
-  if (!artistService || !artistId) {
-    renderArtist({
-      status: "error",
-      message: artistService
-        ? "Spotify did not return a usable artist identifier."
-        : "Log in to Spotify to open artists.",
-    });
+function createCatalogEntry(kind, selection) {
+  const id = typeof selection === "string" ? selection : selection?.id;
+  return {
+    kind,
+    id: typeof id === "string" ? id : null,
+    status: "loading",
+    result: null,
+    message: null,
+  };
+}
+
+function snapshotCatalogEntry(entry) {
+  if (entry?.kind === "search") return { ...searchView };
+  return { ...entry };
+}
+
+async function loadCatalogEntry(entry) {
+  catalogAbortController?.abort();
+  catalogAbortController = undefined;
+  if (!entry?.id) {
+    entry.status = "error";
+    entry.message = "Spotify did not return a usable page identifier.";
+    renderCatalogCurrent();
     return;
   }
-
+  const service = catalogService(entry.kind);
+  if (!service) {
+    entry.status = "error";
+    entry.message = `Log in to Spotify to open ${catalogKindLabel(entry.kind, true)}.`;
+    renderCatalogCurrent();
+    return;
+  }
+  entry.status = "loading";
+  renderCatalogCurrent();
   const request = new AbortController();
-  artistAbortController = request;
-  renderArtist({ status: "loading" });
+  catalogAbortController = request;
   try {
-    const result = await artistService.loadArtist(artistId, { signal: request.signal });
-    if (artistAbortController !== request) return;
-    renderArtist({ status: "ready", result });
+    const method = {
+      album: "loadAlbum",
+      artist: "loadArtist",
+      track: "loadTrack",
+      playlist: "loadPlaylist",
+    }[entry.kind];
+    const result = await service[method](entry.id, { signal: request.signal });
+    if (catalogAbortController !== request || catalogCurrent !== entry) return;
+    entry.status = "ready";
+    entry.result = result;
+    entry.message = null;
+    renderCatalogCurrent();
   } catch (error) {
-    if (error?.name === "AbortError" || artistAbortController !== request) return;
-    console.warn("Spotify artist failed to load.", safeDiagnostic(error, "artist"));
-    renderArtist({ status: "error", message: humanizeArtistError(error) });
+    if (error?.name === "AbortError" || catalogAbortController !== request || catalogCurrent !== entry) return;
+    console.warn(`Spotify ${entry.kind} failed to load.`, safeDiagnostic(error, entry.kind));
+    entry.status = "error";
+    entry.message = humanizeCatalogError(entry.kind, error);
+    renderCatalogCurrent();
   } finally {
-    if (artistAbortController === request) artistAbortController = undefined;
+    if (catalogAbortController === request) catalogAbortController = undefined;
   }
 }
 
-async function openTrackPage(selection) {
-  const trackId = typeof selection === "string" ? selection : selection?.id;
-  openModal("modal-track");
-  trackAbortController?.abort();
-  trackAbortController = undefined;
-  if (!trackService || !trackId) {
-    renderTrack({
-      status: "error",
-      message: trackService
-        ? "Spotify did not return a usable song identifier."
-        : "Log in to Spotify to open songs.",
+function catalogService(kind) {
+  return { album: albumService, artist: artistService, track: trackService, playlist: playlistService }[kind];
+}
+
+function renderCatalogCurrent({ animate = true } = {}) {
+  const container = getSearchResultsContainer();
+  if (!container) return;
+  const current = catalogCurrent || searchView;
+  container.classList.toggle("catalog-detail", current.kind !== "search");
+  if (current.kind === "search") {
+    renderSearch({
+      status: current.status,
+      query: current.query,
+      results: current.results,
+      message: current.message,
+      animate,
+    });
+    setSearchChrome({
+      expanded: current.status !== "idle" && Boolean(current.query),
+      canGoBack: catalogHistory.length > 0,
+      query: current.query,
     });
     return;
   }
 
-  const request = new AbortController();
-  trackAbortController = request;
-  renderTrack({ status: "loading" });
-  try {
-    const result = await trackService.loadTrack(trackId, { signal: request.signal });
-    if (trackAbortController !== request) return;
-    renderTrack({ status: "ready", result });
-  } catch (error) {
-    if (error?.name === "AbortError" || trackAbortController !== request) return;
-    console.warn("Spotify song failed to load.", safeDiagnostic(error, "track"));
-    renderTrack({ status: "error", message: humanizeTrackError(error) });
-  } finally {
-    if (trackAbortController === request) trackAbortController = undefined;
+  setSearchChrome({
+    expanded: true,
+    canGoBack: catalogHistory.length > 0,
+    query: searchView.query,
+  });
+  const options = {
+    container,
+    status: current.status,
+    result: current.result,
+    message: current.message,
+    currentUri: currentPlayback?.itemUri || null,
+  };
+  if (current.kind === "album") renderAlbum(options);
+  else if (current.kind === "artist") renderArtist(options);
+  else if (current.kind === "track") renderTrack(options);
+  else if (current.kind === "playlist") renderPlaylist(options);
+  if (animate) animateSearchContent(container);
+}
+
+function catalogKindLabel(kind, plural = false) {
+  const singular = { album: "releases", artist: "artists", track: "songs", playlist: "playlists" }[kind] || "pages";
+  return plural ? singular : singular.replace(/s$/u, "");
+}
+
+function humanizeCatalogError(kind, error) {
+  if (kind === "album") return humanizeAlbumError(error);
+  if (kind === "artist") return humanizeArtistError(error);
+  if (kind === "track") return humanizeTrackError(error);
+  if (error instanceof SpotifyApiError && error.status === 403) {
+    return "Spotify returned the playlist metadata but does not allow Spool to read its songs.";
   }
+  return humanizeError(error);
+}
+
+// Compatibility wrappers retained for code/tests that still reference the old
+// standalone detail-page names.
+function openAlbumPage(selection) {
+  navigateCatalog("album", selection);
+}
+
+function openArtistPage(selection) {
+  navigateCatalog("artist", selection);
+}
+
+function openTrackPage(selection) {
+  navigateCatalog("track", selection);
 }
 
 function returnFromAlbum() {
-  albumAbortController?.abort();
-  albumAbortController = undefined;
-  const target = document.getElementById(albumReturnModal) ? albumReturnModal : "modal-search";
-  openModal(target);
-  if (target === "modal-search") focusSearch();
+  navigateCatalogBack();
 }
 
 function returnToSearch() {
-  albumAbortController?.abort();
-  artistAbortController?.abort();
-  trackAbortController?.abort();
-  albumAbortController = undefined;
-  artistAbortController = undefined;
-  trackAbortController = undefined;
-  openModal("modal-search");
-  focusSearch();
+  navigateCatalogBack();
 }
 
 async function syncLyrics(playback) {
@@ -1236,7 +1375,7 @@ async function openLibrarySource(sourceId) {
   cancelLibraryRequest();
   const request = new AbortController();
   libraryAbortController = request;
-  renderLibraryDetail({ source, status: "loading", total: source.total });
+  renderLibraryDetail({ source, status: "loading", total: source.total, currentUri: currentPlayback?.itemUri || null });
   try {
     const loadSource = libraryService.loadSource?.bind(libraryService);
     const page = loadSource
@@ -1248,6 +1387,7 @@ async function openLibrarySource(sourceId) {
             selectedLibraryDurationMs = progress.durationMs;
             renderLibraryDetail({
               source,
+              currentUri: currentPlayback?.itemUri || null,
               items: selectedLibraryItems,
               total: progress.total,
               durationMs: progress.durationMs,
@@ -1266,6 +1406,7 @@ async function openLibrarySource(sourceId) {
     selectedLibraryDurationMs = page.durationMs ?? selectedLibraryDurationMs;
     renderLibraryDetail({
       source,
+      currentUri: currentPlayback?.itemUri || null,
       items: selectedLibraryItems,
       total: page.total,
       durationMs: selectedLibraryDurationMs,
@@ -1278,6 +1419,7 @@ async function openLibrarySource(sourceId) {
     console.warn("Spotify library source failed to load.", safeDiagnostic(error, "library-items"));
     renderLibraryDetail({
       source,
+      currentUri: currentPlayback?.itemUri || null,
       status: "error",
       total: source.total,
       message: humanizeLibraryError(error),
@@ -1311,6 +1453,7 @@ async function loadMoreLibraryItems() {
     );
     renderLibraryDetail({
       source,
+      currentUri: currentPlayback?.itemUri || null,
       items: selectedLibraryItems,
       total: page.total,
       durationMs: selectedLibraryDurationMs,
@@ -1336,6 +1479,7 @@ function renderSelectedLibrary() {
     message: selectedLibrarySource.canBrowse
       ? null
       : selectedLibrarySource.unavailableReason,
+    currentUri: currentPlayback?.itemUri || null,
   });
 }
 
@@ -1590,9 +1734,236 @@ function bindDock() {
   });
 }
 
+async function executeCommand(command) {
+  const { name, args, argument } = command;
+  const requirePlayback = () => {
+    if (!controller || !currentPlayback?.activeDevice) {
+      throw new Error("Use Spool as the active Spotify device first.");
+    }
+  };
+
+  if (name === "help" || name === "?") {
+    return {
+      keepOpen: true,
+      message: "play [song/artist/album/playlist] · pause · next · prev · seek 1:20/+30 · volume 65 · shuffle on/off · repeat off/context/track · queue [song] · open artist/album/song/playlist · search · library · lyrics · fullscreen · device",
+    };
+  }
+  if (name === "play" && !argument) {
+    requirePlayback();
+    await controller.togglePlay();
+    return;
+  }
+  if (name === "pause") {
+    requirePlayback();
+    if (currentPlayback?.isPlaying) await controller.togglePlay();
+    return;
+  }
+  if (name === "next") {
+    requirePlayback();
+    await controller.next();
+    return;
+  }
+  if (name === "prev") {
+    requirePlayback();
+    await controller.previous();
+    return;
+  }
+  if (name === "seek") {
+    requirePlayback();
+    const target = parseSeekArgument(argument, currentPlayback?.positionMs || 0);
+    if (target === null) throw new Error("Use seek 1:20, seek 75, seek +30, or seek -15.");
+    await controller.seek(target);
+    return;
+  }
+  if (name === "volume") {
+    requirePlayback();
+    const numeric = Number(argument.replace(/%$/u, ""));
+    if (!Number.isFinite(numeric)) throw new Error("Use volume 0-100.");
+    const volume = numeric > 1 ? numeric / 100 : numeric;
+    await controller.setVolume(Math.max(0, Math.min(1, volume)));
+    return;
+  }
+  if (name === "speed") {
+    const numeric = Number(argument.replace(/x$/iu, ""));
+    if (!Number.isFinite(numeric)) throw new Error("Use speed 0.5-2.5.");
+    setPlaybackSpeed(numeric);
+    return;
+  }
+  if (name === "shuffle") {
+    requirePlayback();
+    const value = argument.toLowerCase();
+    const enabled = ["on", "true", "1"].includes(value)
+      ? true
+      : ["off", "false", "0"].includes(value)
+        ? false
+        : !currentPlayback?.shuffleEnabled;
+    await controller.setShuffle(enabled);
+    return;
+  }
+  if (name === "repeat") {
+    requirePlayback();
+    const value = argument.toLowerCase();
+    const mode = value === "all" ? "context" : value === "one" ? "track" : value;
+    if (!mode) await controller.cycleRepeat();
+    else if (["off", "context", "track"].includes(mode)) await controller.setRepeat(mode);
+    else throw new Error("Use repeat off, repeat context, or repeat track.");
+    return;
+  }
+  if (name === "queue") {
+    if (!argument) {
+      queueVisible = !queueVisible;
+      setQueueVisible(queueVisible);
+      saveUiPreferences();
+      if (queueVisible) await controller?.refreshQueue?.();
+      return;
+    }
+    requirePlayback();
+    const results = await commandSearch(argument);
+    const track = results.tracks?.[0];
+    if (!track?.uri) throw new Error(`No playable song found for “${argument}”.`);
+    await controller.addToQueue(track.uri);
+    showToast(`Queued ${track.title}.`);
+    return;
+  }
+  if (name === "search") {
+    openModal("modal-search");
+    if (argument) await searchSpotify(argument);
+    else renderCatalogCurrent({ animate: false });
+    focusSearch();
+    return;
+  }
+  if (name === "open") {
+    await executeOpenCommand(args);
+    return;
+  }
+  if (name === "library") {
+    openModal("modal-library");
+    return;
+  }
+  if (name === "lyrics") {
+    lyricsVisible = !lyricsVisible;
+    setLyricsVisible(lyricsVisible);
+    saveUiPreferences();
+    return;
+  }
+  if (name === "fullscreen") {
+    toggleImmersive();
+    return;
+  }
+  if (name === "settings") {
+    openModal("modal-settings");
+    return;
+  }
+  if (name === "sound") {
+    openModal("modal-eq");
+    return;
+  }
+  if (name === "device") {
+    await executeDeviceCommand(argument);
+    return;
+  }
+  if (name === "status") {
+    return {
+      keepOpen: true,
+      message: currentPlayback?.title
+        ? `${currentPlayback.title} — ${currentPlayback.artist || "Unknown artist"} · ${currentPlayback.isPlaying ? "playing" : "paused"}`
+        : "Nothing is playing.",
+    };
+  }
+  if (name === "play") {
+    requirePlayback();
+    await executePlayCommand(args);
+    return;
+  }
+
+  // An unrecognized command doubles as a catalog play query, matching the
+  // original player's quick fuzzy command behavior without searching per key.
+  requirePlayback();
+  await executePlayCommand([command.raw]);
+}
+
+async function executePlayCommand(args) {
+  const requestedType = normalizeCatalogType(args[0]);
+  const query = requestedType ? args.slice(1).join(" ") : args.join(" ");
+  if (!query) throw new Error("Add a song, artist, album, or playlist name after play.");
+  const results = await commandSearch(query);
+  const item = chooseCommandResult(results, requestedType);
+  if (!item) throw new Error(`No playable Spotify result found for “${query}”.`);
+  if (item.type === "track") await playTrackNow({ uri: item.uri });
+  else await playTrackNow({ contextUri: item.contextUri, contextOnly: true });
+}
+
+async function executeOpenCommand(args) {
+  let requestedType = normalizeCatalogType(args[0]);
+  let query = requestedType ? args.slice(1).join(" ") : args.join(" ");
+  if (query.toLowerCase() === "current" || (!query && requestedType)) {
+    const current = currentPlayback?.currentItem || currentPlayback?.item;
+    if (requestedType === "album" && current?.albumId) return navigateCatalog("album", { id: current.albumId });
+    if (requestedType === "artist" && current?.artists?.[0]?.id) return navigateCatalog("artist", { id: current.artists[0].id });
+    if (requestedType === "track" && current?.id) return navigateCatalog("track", { id: current.id });
+    throw new Error("The current item does not expose that Spotify page.");
+  }
+  if (!query) throw new Error("Use open artist, open album, open song, or open playlist followed by a name.");
+  const results = await commandSearch(query);
+  const item = chooseCommandResult(results, requestedType, { requireBrowseable: true });
+  if (!item?.id) throw new Error(`No matching Spotify page found for “${query}”.`);
+  requestedType = item.type === "track" ? "track" : item.type;
+  navigateCatalog(requestedType, { id: item.id });
+}
+
+async function executeDeviceCommand(argument) {
+  if (!controller) throw new Error("Connect Spotify first.");
+  const query = argument.trim().toLowerCase();
+  if (!query) {
+    openModal("modal-settings");
+    await refreshDevices();
+    return;
+  }
+  if (["spool", "here", "browser"].includes(query)) return transferHere();
+  if (!currentDevices.length) await refreshDevices();
+  const device = currentDevices.find((candidate) => candidate.name?.toLowerCase().includes(query));
+  if (!device) throw new Error(`No Spotify device matched “${argument}”.`);
+  await transferToDevice(device.id);
+}
+
+async function commandSearch(query) {
+  if (!searchService) throw new Error("Log in to Spotify before searching.");
+  return searchService.search(String(query || "").trim());
+}
+
+function chooseCommandResult(results, requestedType, { requireBrowseable = false } = {}) {
+  const group = requestedType === "track"
+    ? results.tracks
+    : requestedType === "artist"
+      ? results.artists
+      : requestedType === "album"
+        ? results.albums
+        : requestedType === "playlist"
+          ? results.playlists
+          : [...(results.tracks || []), ...(results.artists || []), ...(results.albums || []), ...(results.playlists || [])];
+  return (group || []).find((item) => (
+    (!requireBrowseable || item.browseable !== false) &&
+    (requireBrowseable ? Boolean(item.id) : Boolean(item.uri || item.contextUri))
+  )) || null;
+}
+
+function normalizeCatalogType(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (["song", "track"].includes(normalized)) return "track";
+  if (["artist", "album", "playlist"].includes(normalized)) return normalized;
+  if (["single", "release"].includes(normalized)) return "album";
+  return null;
+}
+
 function bindKeyboard() {
   window.addEventListener("keydown", async (event) => {
     if (event.defaultPrevented) return;
+    if (event.ctrlKey && event.shiftKey && event.code === "Slash") {
+      event.preventDefault();
+      if (isCommandPaletteOpen()) closeCommandPalette();
+      else openCommandPalette();
+      return;
+    }
     if (event.ctrlKey && event.shiftKey && event.code === "KeyH") {
       event.preventDefault();
       if (config?.mock || auth?.hasSession()) toggleHiddenMode({ userInitiated: true });
@@ -1650,6 +2021,7 @@ function bindKeyboard() {
     } else if (event.key === "/") {
       event.preventDefault();
       openModal("modal-search");
+      renderCatalogCurrent({ animate: false });
       focusSearch();
     } else if (event.code === "Tab" && !event.ctrlKey && !event.altKey) {
       event.preventDefault();
@@ -1657,7 +2029,8 @@ function bindKeyboard() {
     } else if (event.code === "KeyS") {
       openModal(event.shiftKey ? "modal-eq" : "modal-settings");
     } else if (event.key === "Escape") {
-      if (isImmersiveOpen()) closeImmersive();
+      if (isCommandPaletteOpen()) closeCommandPalette();
+      else if (isImmersiveOpen()) closeImmersive();
       else if (isModalOpen()) closeModals();
     }
   });

@@ -237,27 +237,35 @@ export class PlaybackController extends Emitter {
       throw new RangeError("The Spotify queue changed before that item was selected.");
     }
 
-    const selectedItem = queueSnapshot[queueIndex];
-    const selectedUri = selectedItem?.uri || uri;
-    const contextUri = this.playbackState?.context?.uri || null;
-    const supportsTrackOffset = /^spotify:(?:album|playlist):/u.test(contextUri || "");
-    const albumContext = /^spotify:album:/u.test(contextUri || "");
-    const belongsToAlbum = !albumContext || selectedItem?.albumUri === contextUri;
-    const fallbackUris = queueSnapshot
-      .slice(queueIndex)
-      .filter((item) => directPlaybackBlockReason(item) === null)
-      .map((item) => item.uri);
-    if (!fallbackUris.length) fallbackUris.push(selectedUri);
-
-    // Spotify can reposition an album/playlist context in one Start Playback
-    // request. This lets Spotify rebuild the rest of the queue itself and avoids
-    // issuing one Skip Next request per row (which can trigger rate limiting).
-    // Album recommendations are distinguishable by album URI and start as the
-    // visible queue tail. Playlist recommendations are not labelled by the API,
-    // so a rejected context offset falls back once to that same queue tail.
-    return this.playNow(selectedUri, supportsTrackOffset && belongsToAlbum
-      ? { contextUri, fallbackUris }
-      : { uris: fallbackUris });
+    // Do not recreate the visible tail as a new URI-list context. Spotify's
+    // queue can contain an open-ended autoplay/recommendation continuation;
+    // replacing it with a finite list destroys that context and its previous
+    // history. Advance through the real queue instead so Spotify remains the
+    // owner of both the prior items and any recommendations it appends later.
+    const steps = queueIndex + 1;
+    if (steps > 1) {
+      this.emit("notice", { message: `Jumping forward ${steps} songs without replacing Spotify's queue…` });
+    }
+    try {
+      for (let step = 0; step < steps; step += 1) {
+        if (this.#sdk.ready) await this.#sdk.next();
+        else await this.#api.skipNext({ deviceId: this.deviceId });
+      }
+      const [state] = await Promise.all([
+        this.refreshState({ fresh: true }),
+        this.refreshQueue().catch(() => this.queue),
+      ]);
+      const expectedUri = queueSnapshot[queueIndex]?.uri || uri || null;
+      if (expectedUri && state?.itemUri && state.itemUri !== expectedUri) {
+        this.emit("notice", {
+          message: "Spotify's queue changed while Spool was jumping forward. The current Spotify queue was preserved.",
+        });
+      }
+      return true;
+    } catch (error) {
+      this.#emitCommandError("Spotify could not jump to that queue item.", error);
+      throw error;
+    }
   }
 
   async togglePlay() {
@@ -332,17 +340,24 @@ export class PlaybackController extends Emitter {
     }
   }
 
-  async cycleRepeat() {
-    const current = this.playbackState?.repeatMode ?? "off";
-    const nextMode = REPEAT_ORDER[(REPEAT_ORDER.indexOf(current) + 1) % REPEAT_ORDER.length];
+  async setRepeat(mode) {
+    if (!REPEAT_ORDER.includes(mode)) {
+      throw new TypeError("Repeat mode must be off, context, or track.");
+    }
     try {
-      await this.#api.setRepeat(nextMode, { deviceId: this.deviceId });
+      await this.#api.setRepeat(mode, { deviceId: this.deviceId });
       await this.refreshState({ fresh: true });
       return this.playbackState.repeatMode;
     } catch (error) {
       this.#emitCommandError("Spotify rejected the repeat command.", error);
       throw error;
     }
+  }
+
+  async cycleRepeat() {
+    const current = this.playbackState?.repeatMode ?? "off";
+    const nextMode = REPEAT_ORDER[(REPEAT_ORDER.indexOf(current) + 1) % REPEAT_ORDER.length];
+    return this.setRepeat(nextMode);
   }
 
   async refreshState({ signal, fresh = false } = {}) {
