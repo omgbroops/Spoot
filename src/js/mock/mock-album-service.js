@@ -3,7 +3,10 @@ import { directPlaybackBlockReason } from "../spotify/playability.js";
 
 export class MockAlbumService {
   async loadAlbum(albumId) {
-    const tracks = MOCK_TRACKS.filter((track) => track.type === "track").map((track, position) => {
+    const isSingle = albumId === "mock-single";
+    const sourceTracks = MOCK_TRACKS.filter((track) => track.type === "track");
+    const selectedTracks = isSingle ? sourceTracks.slice(0, 1) : sourceTracks;
+    const tracks = selectedTracks.map((track, position) => {
       const unavailableReason = directPlaybackBlockReason(track);
       return {
         ...track,
@@ -17,9 +20,9 @@ export class MockAlbumService {
     return {
       album: {
         id: albumId || "mock-album",
-        uri: "spotify:album:mockalbum",
-        name: "Afterimage",
-        type: "album",
+        uri: isSingle ? "spotify:album:mocksingle" : "spotify:album:mockalbum",
+        name: isSingle ? "Silver Thread" : "Afterimage",
+        type: isSingle ? "single" : "album",
         artistNames: ["Spool Mock Artists"],
         artist: "Spool Mock Artists",
         artworkUrl: tracks[0]?.artworkUrl || null,

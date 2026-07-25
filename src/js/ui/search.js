@@ -9,7 +9,7 @@ const GROUPS = Object.freeze([
 
 let cleanup;
 
-export function setupSearch({ onQuery, onPlay, onOpenAlbum } = {}) {
+export function setupSearch({ onQuery, onPlay, onOpenAlbum, onOpenArtist, onOpenTrack } = {}) {
   cleanup?.();
   const form = document.getElementById("search-form");
   const input = document.getElementById("search-input");
@@ -30,6 +30,16 @@ export function setupSearch({ onQuery, onPlay, onOpenAlbum } = {}) {
     const album = event.target.closest("[data-search-open-album]");
     if (album && !album.disabled) {
       onOpenAlbum?.({ id: album.dataset.searchOpenAlbum });
+      return;
+    }
+    const artist = event.target.closest("[data-search-open-artist]");
+    if (artist && !artist.disabled) {
+      onOpenArtist?.({ id: artist.dataset.searchOpenArtist });
+      return;
+    }
+    const track = event.target.closest("[data-search-open-track]");
+    if (track && !track.disabled) {
+      onOpenTrack?.({ id: track.dataset.searchOpenTrack });
       return;
     }
     const action = event.target.closest("[data-search-play]");
@@ -105,13 +115,20 @@ function searchRow(item) {
   const badge = document.createElement("span");
 
   const opensAlbum = item.type === "album" && item.browseable !== false && Boolean(item.id);
-  const interactive = item.type === "album" ? opensAlbum : item.playable;
+  const opensArtist = item.type === "artist" && item.browseable !== false && Boolean(item.id);
+  const opensTrack = item.type === "track" && item.browseable !== false && Boolean(item.id);
+  const opensDetail = opensAlbum || opensArtist || opensTrack;
+  const interactive = opensDetail || item.playable;
   row.className = `search-result search-${item.type}${interactive ? "" : " unavailable"}`;
   play.type = "button";
   play.className = "search-result-main";
   play.disabled = !interactive;
   if (opensAlbum) {
     play.dataset.searchOpenAlbum = item.id;
+  } else if (opensArtist) {
+    play.dataset.searchOpenArtist = item.id;
+  } else if (opensTrack) {
+    play.dataset.searchOpenTrack = item.id;
   } else {
     play.dataset.searchPlay = "";
     if (item.uri) play.dataset.searchUri = item.uri;
@@ -119,7 +136,7 @@ function searchRow(item) {
     play.dataset.searchContextOnly = String(item.type !== "track");
   }
   play.setAttribute("aria-label", interactive
-    ? `${opensAlbum ? "Open" : "Play"} ${item.title}`
+    ? `${opensDetail ? "Open" : "Play"} ${item.title}`
     : `${item.title} is unavailable`);
 
   image.src = item.artworkUrl || DEFAULT_COVER;
@@ -132,7 +149,7 @@ function searchRow(item) {
   badge.className = "search-type";
   badge.textContent = item.type === "track" ? "Song" : item.type[0].toUpperCase() + item.type.slice(1);
   copy.append(title, subtitle);
-  play.append(image, copy, badge, resultIcon(opensAlbum));
+  play.append(image, copy, badge, resultIcon(opensDetail));
   row.append(play);
 
   if (item.externalUrl) {
@@ -148,11 +165,11 @@ function searchRow(item) {
   return row;
 }
 
-function resultIcon(opensAlbum = false) {
+function resultIcon(opensDetail = false) {
   const icon = document.createElement("span");
   icon.className = "search-play-icon";
   icon.setAttribute("aria-hidden", "true");
-  icon.innerHTML = opensAlbum
+  icon.innerHTML = opensDetail
     ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m9 18 6-6-6-6"/></svg>'
     : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>';
   return icon;

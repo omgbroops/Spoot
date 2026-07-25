@@ -36,24 +36,29 @@ export function setupAlbum({ onPlay, onBack } = {}) {
 
 export function renderAlbum({ status = "idle", result, message } = {}) {
   const content = document.getElementById("album-content");
+  const label = document.getElementById("album-title-label");
   if (!content) return;
   content.replaceChildren();
   content.setAttribute("aria-busy", String(status === "loading"));
 
   if (status === "loading") {
-    content.append(albumMessage("Loading album…"));
+    if (label) label.textContent = "Release";
+    content.append(albumMessage("Loading release…"));
     return;
   }
   if (status === "error") {
-    content.append(albumMessage(message || "This album is temporarily unavailable."));
+    if (label) label.textContent = "Release";
+    content.append(albumMessage(message || "This release is temporarily unavailable."));
     return;
   }
   if (!result?.album) {
-    content.append(albumMessage("Choose an album from Search."));
+    if (label) label.textContent = "Release";
+    content.append(albumMessage("Choose an album or single from Search."));
     return;
   }
 
   const { album, tracks = [], durationMs = 0 } = result;
+  if (label) label.textContent = releaseKind(album.type);
   content.append(albumHeader(
     album,
     Number.isFinite(result.total) ? result.total : tracks.length,
@@ -89,7 +94,7 @@ function albumHeader(album, trackCount, durationMs, hasPlayableTrack) {
   image.loading = "lazy";
   copy.className = "album-detail-copy";
   kind.className = "album-kind";
-  kind.textContent = album.type === "single" ? "Single" : album.type === "compilation" ? "Compilation" : "Album";
+  kind.textContent = releaseKind(album.type);
   title.textContent = album.name;
   artist.className = "album-artist";
   artist.textContent = album.artist;
@@ -105,7 +110,7 @@ function albumHeader(album, trackCount, durationMs, hasPlayableTrack) {
   play.dataset.albumPlayAll = "";
   play.dataset.albumContext = album.uri;
   play.disabled = !album.uri || !hasPlayableTrack;
-  play.textContent = "Play album";
+  play.textContent = `Play ${releaseKind(album.type).toLowerCase()}`;
   actions.append(play);
   if (album.externalUrl) {
     const link = document.createElement("a");
@@ -119,6 +124,11 @@ function albumHeader(album, trackCount, durationMs, hasPlayableTrack) {
   copy.append(kind, title, artist, meta, actions);
   header.append(image, copy);
   return header;
+}
+
+
+function releaseKind(type) {
+  return type === "single" ? "Single" : type === "compilation" ? "Compilation" : "Album";
 }
 
 function trackRow(track, album) {

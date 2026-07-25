@@ -16,6 +16,7 @@ test("search normalization keeps playable catalog contexts and unavailable playl
         name: "Signal Path",
         artists: [{ name: "Static Bloom" }],
         album: {
+          id: "album-1",
           name: "Transmission",
           uri: "spotify:album:album-1",
           images: [{ url: "cover.jpg" }],
@@ -32,7 +33,10 @@ test("search normalization keeps playable catalog contexts and unavailable playl
   assert.equal(results.total, 5);
   assert.equal(results.tracks[0].contextUri, "spotify:album:album-1");
   assert.equal(results.tracks[0].playable, true);
+  assert.equal(results.tracks[0].browseable, true);
+  assert.equal(results.tracks[0].albumId, "album-1");
   assert.equal(results.artists[0].contextUri, "spotify:artist:artist-1");
+  assert.equal(results.artists[0].browseable, true);
   assert.match(results.albums[0].subtitle, /9 tracks/u);
   assert.equal(results.albums[0].browseable, true);
   assert.equal(results.playlists[0].playable, false);

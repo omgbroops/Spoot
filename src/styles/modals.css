@@ -81,11 +81,15 @@
   width: min(94vw, 760px);
 }
 
-#modal-album {
+#modal-album,
+#modal-artist,
+#modal-track {
   width: min(94vw, 760px);
 }
 
-.album-body {
+.album-body,
+.artist-body,
+.track-body {
   min-height: 390px;
 }
 
@@ -634,8 +638,167 @@
   font-size: 11.5px;
 }
 
-.album-message {
+.album-message,
+.artist-message,
+.track-message {
   min-height: 250px;
+}
+
+.artist-detail-head,
+.track-detail-head {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 18px;
+  align-items: end;
+  padding: 2px 4px 18px;
+  border-bottom: 0.5px solid var(--stroke-soft);
+  margin-bottom: 14px;
+}
+
+.artist-detail-image,
+.track-detail-cover {
+  width: 112px;
+  height: 112px;
+  background: #161619;
+  box-shadow: 0 14px 30px -20px rgba(0, 0, 0, 0.9);
+  object-fit: cover;
+}
+
+.artist-detail-image {
+  border-radius: 50%;
+}
+
+.track-detail-cover {
+  border-radius: 17px;
+}
+
+.artist-detail-copy,
+.track-detail-copy {
+  min-width: 0;
+}
+
+.artist-kind,
+.track-kind {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.artist-detail-copy h2,
+.track-detail-copy h2 {
+  overflow: hidden;
+  margin: 0;
+  font-size: clamp(22px, 4vw, 34px);
+  font-weight: 650;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artist-meta,
+.track-artist,
+.track-meta {
+  overflow: hidden;
+  margin: 5px 0 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artist-meta,
+.track-meta {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.track-artist {
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.artist-actions,
+.track-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.artist-open-spotify,
+.track-open-spotify {
+  text-decoration: none;
+}
+
+.artist-release-section + .artist-release-section {
+  margin-top: 22px;
+}
+
+.artist-release-section h3 {
+  margin: 0 4px 10px;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.artist-release-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.artist-release-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  padding: 8px;
+  border-radius: 17px;
+  color: inherit;
+  text-align: left;
+  transition: background 0.14s ease, opacity 0.14s ease;
+}
+
+.artist-release-card:hover,
+.artist-release-card:focus-visible {
+  background: var(--hover);
+}
+
+.artist-release-card.unavailable {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.artist-release-card img {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 13px;
+  background: #161619;
+  object-fit: cover;
+}
+
+.artist-release-card strong,
+.artist-release-card span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artist-release-card strong {
+  margin-top: 3px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.artist-release-card span {
+  color: var(--text-faint);
+  font-size: 10.5px;
 }
 
 .head-btns {
@@ -1074,23 +1237,39 @@ button.toggle {
     display: none;
   }
 
-  .album-detail-head {
+  .album-detail-head,
+  .artist-detail-head,
+  .track-detail-head {
     grid-template-columns: 78px minmax(0, 1fr);
     gap: 13px;
   }
 
-  .album-detail-cover {
+  .album-detail-cover,
+  .artist-detail-image,
+  .track-detail-cover {
     width: 78px;
     height: 78px;
+  }
+
+  .album-detail-cover,
+  .track-detail-cover {
     border-radius: 14px;
   }
 
-  .album-detail-copy h2 {
+  .album-detail-copy h2,
+  .artist-detail-copy h2,
+  .track-detail-copy h2 {
     font-size: 22px;
   }
 
-  .album-actions {
+  .album-actions,
+  .artist-actions,
+  .track-actions {
     flex-wrap: wrap;
+  }
+
+  .artist-release-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .spotify-setting {

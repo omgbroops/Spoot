@@ -31,7 +31,10 @@ export function normalizeSearchResponse(payload) {
           uri: item.uri,
           contextUri: track?.album?.uri ?? null,
           externalUrl: item.externalUrl,
+          albumId: typeof track?.album?.id === "string" ? track.album.id : null,
+          albumType: track?.album?.album_type ?? null,
           playable: Boolean(item.uri && item.isPlayable !== false && !item.isLocal),
+          browseable: Boolean(item.id),
         }
       : null;
   }).filter(Boolean);
@@ -62,6 +65,7 @@ export function normalizeSearchResponse(payload) {
     contextUri: artist.uri ?? null,
     externalUrl: externalUrl(artist),
     playable: Boolean(artist.uri),
+    browseable: typeof artist.id === "string" && Boolean(artist.id),
   }));
 
   const playlists = (payload?.playlists?.items ?? []).map((playlist, index) => {

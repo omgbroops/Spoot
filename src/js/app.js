@@ -22,11 +22,15 @@ import { SpotifyQueueService } from "./spotify/queue-service.js";
 import { SpotifyLibraryService } from "./spotify/library-service.js";
 import { SpotifySearchService } from "./spotify/search-service.js";
 import { SpotifyAlbumService } from "./spotify/album-service.js";
+import { SpotifyArtistService } from "./spotify/artist-service.js";
+import { SpotifyTrackService } from "./spotify/track-service.js";
 import { LyricsService } from "./lyrics/lyrics-service.js";
 import { MockPlaybackController } from "./mock/mock-playback-controller.js";
 import { MockLibraryService } from "./mock/mock-library-service.js";
 import { MockSearchService } from "./mock/mock-search-service.js";
 import { MockAlbumService } from "./mock/mock-album-service.js";
+import { MockArtistService } from "./mock/mock-artist-service.js";
+import { MockTrackService } from "./mock/mock-track-service.js";
 import { MockLyricsService } from "./mock/mock-lyrics-service.js";
 import { getElements } from "./ui/elements.js";
 import {
@@ -43,6 +47,8 @@ import {
 } from "./ui/library.js";
 import { focusSearch, renderSearch, setupSearch } from "./ui/search.js";
 import { renderAlbum, setupAlbum } from "./ui/album.js";
+import { renderArtist, setupArtist } from "./ui/artist.js";
+import { renderTrack, setupTrack } from "./ui/track.js";
 import { renderLyrics, setupLyrics, updateLyricsPosition } from "./ui/lyrics.js";
 import { renderDevicePicker, setupDevicePicker } from "./ui/device-picker.js";
 import {
@@ -104,6 +110,8 @@ let controller;
 let libraryService;
 let searchService;
 let albumService;
+let artistService;
+let trackService;
 let lyricsService;
 let connectionState = "not-configured";
 let currentPlayback = null;
@@ -134,8 +142,11 @@ let pendingOAuthCallback;
 let searchAbortController;
 let libraryAbortController;
 let albumAbortController;
+let artistAbortController;
+let trackAbortController;
 let lyricsAbortController;
 let currentLyricsTrackKey;
+let albumReturnModal = "modal-search";
 const oauthChannel = createOAuthChannel();
 const audioEffects = createAudioEffectsController({
   onCaptureChange: () => renderSoundSettings(),
@@ -310,12 +321,24 @@ function setupUi() {
   });
   setupAlbum({
     onPlay: playTrackNow,
+    onBack: returnFromAlbum,
+  });
+  setupArtist({
+    onPlay: playTrackNow,
+    onOpenAlbum: (selection) => openAlbumPage(selection, { returnModal: "modal-artist" }),
+    onBack: returnToSearch,
+  });
+  setupTrack({
+    onPlay: playTrackNow,
+    onOpenAlbum: (selection) => openAlbumPage(selection, { returnModal: "modal-track" }),
     onBack: returnToSearch,
   });
   setupSearch({
     onQuery: searchSpotify,
     onPlay: playTrackNow,
     onOpenAlbum: openAlbumPage,
+    onOpenArtist: openArtistPage,
+    onOpenTrack: openTrackPage,
   });
   setupMediaSession({
     onPlay: () => currentPlayback?.paused && runMediaCommand(() => controller?.togglePlay()),
@@ -365,6 +388,14 @@ function setupUi() {
       albumAbortController?.abort();
       albumAbortController = undefined;
     }
+    if (detail?.id === "modal-artist") {
+      artistAbortController?.abort();
+      artistAbortController = undefined;
+    }
+    if (detail?.id === "modal-track") {
+      trackAbortController?.abort();
+      trackAbortController = undefined;
+    }
   });
 }
 
@@ -375,6 +406,8 @@ async function initializeMockMode() {
   libraryService = new MockLibraryService();
   searchService = new MockSearchService();
   albumService = new MockAlbumService();
+  artistService = new MockArtistService();
+  trackService = new MockTrackService();
   lyricsService = new MockLyricsService();
   bindController(controller);
   renderConnection("logged-in", {
@@ -417,6 +450,8 @@ function createLiveController() {
   libraryService = new SpotifyLibraryService({ apiClient });
   searchService = new SpotifySearchService({ apiClient });
   albumService = new SpotifyAlbumService({ apiClient });
+  artistService = new SpotifyArtistService({ apiClient });
+  trackService = new SpotifyTrackService({ apiClient });
   lyricsService = new LyricsService({
     onDiagnostic: (diagnostic) => console.debug("Lyrics provider skipped.", diagnostic),
   });
@@ -567,10 +602,17 @@ function renderLoggedOut() {
   searchAbortController?.abort();
   searchAbortController = undefined;
   albumAbortController?.abort();
+  artistAbortController?.abort();
+  trackAbortController?.abort();
   albumAbortController = undefined;
+  artistAbortController = undefined;
+  trackAbortController = undefined;
+  albumReturnModal = "modal-search";
   resetLyrics("disconnected");
   renderSearch();
   renderAlbum();
+  renderArtist();
+  renderTrack();
   setHiddenMode(false);
   renderConnection("logged-out");
   renderNowPlaying({ emptyMessage: "Log in to Spotify to start" });
@@ -872,6 +914,8 @@ async function logout() {
   libraryService = undefined;
   searchService = undefined;
   albumService = undefined;
+  artistService = undefined;
+  trackService = undefined;
   lyricsService = undefined;
   auth?.logout();
   renderLoggedOut();
@@ -963,8 +1007,9 @@ async function searchSpotify(query) {
   }
 }
 
-async function openAlbumPage(selection) {
+async function openAlbumPage(selection, { returnModal = "modal-search" } = {}) {
   const albumId = typeof selection === "string" ? selection : selection?.id;
+  albumReturnModal = returnModal;
   openModal("modal-album");
   albumAbortController?.abort();
   albumAbortController = undefined;
@@ -972,8 +1017,8 @@ async function openAlbumPage(selection) {
     renderAlbum({
       status: "error",
       message: albumService
-        ? "Spotify did not return a usable album identifier."
-        : "Log in to Spotify to open albums.",
+        ? "Spotify did not return a usable release identifier."
+        : "Log in to Spotify to open releases.",
     });
     return;
   }
@@ -987,16 +1032,90 @@ async function openAlbumPage(selection) {
     renderAlbum({ status: "ready", result });
   } catch (error) {
     if (error?.name === "AbortError" || albumAbortController !== request) return;
-    console.warn("Spotify album failed to load.", safeDiagnostic(error, "album"));
+    console.warn("Spotify release failed to load.", safeDiagnostic(error, "album"));
     renderAlbum({ status: "error", message: humanizeAlbumError(error) });
   } finally {
     if (albumAbortController === request) albumAbortController = undefined;
   }
 }
 
-function returnToSearch() {
+async function openArtistPage(selection) {
+  const artistId = typeof selection === "string" ? selection : selection?.id;
+  openModal("modal-artist");
+  artistAbortController?.abort();
+  artistAbortController = undefined;
+  if (!artistService || !artistId) {
+    renderArtist({
+      status: "error",
+      message: artistService
+        ? "Spotify did not return a usable artist identifier."
+        : "Log in to Spotify to open artists.",
+    });
+    return;
+  }
+
+  const request = new AbortController();
+  artistAbortController = request;
+  renderArtist({ status: "loading" });
+  try {
+    const result = await artistService.loadArtist(artistId, { signal: request.signal });
+    if (artistAbortController !== request) return;
+    renderArtist({ status: "ready", result });
+  } catch (error) {
+    if (error?.name === "AbortError" || artistAbortController !== request) return;
+    console.warn("Spotify artist failed to load.", safeDiagnostic(error, "artist"));
+    renderArtist({ status: "error", message: humanizeArtistError(error) });
+  } finally {
+    if (artistAbortController === request) artistAbortController = undefined;
+  }
+}
+
+async function openTrackPage(selection) {
+  const trackId = typeof selection === "string" ? selection : selection?.id;
+  openModal("modal-track");
+  trackAbortController?.abort();
+  trackAbortController = undefined;
+  if (!trackService || !trackId) {
+    renderTrack({
+      status: "error",
+      message: trackService
+        ? "Spotify did not return a usable song identifier."
+        : "Log in to Spotify to open songs.",
+    });
+    return;
+  }
+
+  const request = new AbortController();
+  trackAbortController = request;
+  renderTrack({ status: "loading" });
+  try {
+    const result = await trackService.loadTrack(trackId, { signal: request.signal });
+    if (trackAbortController !== request) return;
+    renderTrack({ status: "ready", result });
+  } catch (error) {
+    if (error?.name === "AbortError" || trackAbortController !== request) return;
+    console.warn("Spotify song failed to load.", safeDiagnostic(error, "track"));
+    renderTrack({ status: "error", message: humanizeTrackError(error) });
+  } finally {
+    if (trackAbortController === request) trackAbortController = undefined;
+  }
+}
+
+function returnFromAlbum() {
   albumAbortController?.abort();
   albumAbortController = undefined;
+  const target = document.getElementById(albumReturnModal) ? albumReturnModal : "modal-search";
+  openModal(target);
+  if (target === "modal-search") focusSearch();
+}
+
+function returnToSearch() {
+  albumAbortController?.abort();
+  artistAbortController?.abort();
+  trackAbortController?.abort();
+  albumAbortController = undefined;
+  artistAbortController = undefined;
+  trackAbortController = undefined;
   openModal("modal-search");
   focusSearch();
 }
@@ -1721,6 +1840,26 @@ function humanizeAlbumError(error) {
   }
   if (error instanceof SpotifyApiError && error.status === 429) {
     return "Spotify is rate limiting album requests. Try again shortly.";
+  }
+  return humanizeError(error);
+}
+
+function humanizeArtistError(error) {
+  if (error instanceof SpotifyApiError && error.status === 404) {
+    return "Spotify could not find that artist.";
+  }
+  if (error instanceof SpotifyApiError && error.status === 429) {
+    return "Spotify is rate limiting artist requests. Try again shortly.";
+  }
+  return humanizeError(error);
+}
+
+function humanizeTrackError(error) {
+  if (error instanceof SpotifyApiError && error.status === 404) {
+    return "Spotify could not find that song.";
+  }
+  if (error instanceof SpotifyApiError && error.status === 429) {
+    return "Spotify is rate limiting song requests. Try again shortly.";
   }
   return humanizeError(error);
 }

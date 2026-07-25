@@ -380,6 +380,50 @@ export class SpotifyApiClient {
     });
   }
 
+  getArtist(artistId, { signal } = {}) {
+    return this.request(`artists/${assertSpotifyId(artistId, "Artist")}`, {
+      signal,
+    });
+  }
+
+  getArtistAlbums(
+    artistId,
+    {
+      includeGroups = ["album", "single"],
+      limit = 10,
+      offset = 0,
+      market,
+      signal,
+    } = {},
+  ) {
+    const allowedGroups = new Set(["album", "single", "appears_on", "compilation"]);
+    if (!Array.isArray(includeGroups) || !includeGroups.length || includeGroups.some((group) => !allowedGroups.has(group))) {
+      throw new TypeError("Spotify artist album groups are invalid.");
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 10) {
+      throw new RangeError("Spotify artist album limit must be between 1 and 10.");
+    }
+    if (!Number.isInteger(offset) || offset < 0) {
+      throw new RangeError("Spotify artist album offset must be non-negative.");
+    }
+    return this.request(`artists/${assertSpotifyId(artistId, "Artist")}/albums`, {
+      query: {
+        include_groups: includeGroups,
+        limit,
+        offset,
+        market,
+      },
+      signal,
+    });
+  }
+
+  getTrack(trackId, { market, signal } = {}) {
+    return this.request(`tracks/${assertSpotifyId(trackId, "Track")}`, {
+      query: { market },
+      signal,
+    });
+  }
+
   getAlbum(albumId, { market, signal } = {}) {
     return this.request(`albums/${assertSpotifyId(albumId, "Album")}`, {
       query: { market },

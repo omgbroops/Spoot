@@ -307,3 +307,31 @@ test("search and contextual playback use Spotify's documented request shapes", a
     /either a context or a URI list/u,
   );
 });
+
+test("artist and track detail methods use current Spotify metadata endpoints", async () => {
+  const requests = [];
+  const client = new SpotifyApiClient({
+    tokenProvider: async () => "access",
+    fetchImpl: async (url, options) => {
+      requests.push({ url: new URL(url), options });
+      return jsonResponse({ items: [] });
+    },
+  });
+
+  await client.getArtist("Artist123");
+  await client.getArtistAlbums("Artist123", {
+    includeGroups: ["album", "single"],
+    limit: 10,
+    offset: 20,
+    market: "US",
+  });
+  await client.getTrack("Track123", { market: "US" });
+
+  assert.equal(requests[0].url.pathname, "/v1/artists/Artist123");
+  assert.equal(requests[1].url.pathname, "/v1/artists/Artist123/albums");
+  assert.equal(requests[1].url.searchParams.get("include_groups"), "album,single");
+  assert.equal(requests[1].url.searchParams.get("limit"), "10");
+  assert.equal(requests[1].url.searchParams.get("offset"), "20");
+  assert.equal(requests[2].url.pathname, "/v1/tracks/Track123");
+  assert.equal(requests[2].url.searchParams.get("market"), "US");
+});
