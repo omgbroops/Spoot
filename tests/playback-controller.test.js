@@ -311,6 +311,7 @@ test("playlist playback keeps its context while queue clicks advance Spotify's r
       upcoming: queuedTracks.map((item) => ({ id: item.id, uri: item.uri, title: item.name })),
       isEmpty: false,
     }),
+    sleepImpl: async () => {},
     setIntervalImpl: () => 1,
     clearIntervalImpl: () => {},
   });
@@ -352,6 +353,7 @@ test("album recommendation clicks never replace autoplay with a finite URI tail"
     apiClient: api,
     sdk,
     queueService: createQueueService({ nowPlaying: API_TRACK, upcoming: queue, isEmpty: false }),
+    sleepImpl: async () => {},
     setIntervalImpl: () => 1,
     clearIntervalImpl: () => {},
   });
@@ -380,6 +382,7 @@ test("queue jumps use Spotify skip-next when the SDK is temporarily unavailable"
     apiClient: api,
     sdk,
     queueService: createQueueService({ nowPlaying: API_TRACK, upcoming: queue, isEmpty: false }),
+    sleepImpl: async () => {},
     setIntervalImpl: () => 1,
     clearIntervalImpl: () => {},
   });

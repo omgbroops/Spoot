@@ -1,3 +1,5 @@
+import { LyricsStore, lyricsRecordKey } from "./lyrics-store.js";
+
 const DEFAULT_LRCLIB_BASE = "https://lrclib.net/api";
 const CACHE_LIMIT = 40;
 
@@ -10,10 +12,6 @@ export class LyricsProviderError extends Error {
   }
 }
 
-function lyricsKey(track) {
-  return track?.id || track?.uri || [track?.title, track?.artist, track?.durationMs].join("|");
-}
-
 function remember(cache, key, value) {
   cache.delete(key);
   cache.set(key, value);
@@ -22,12 +20,15 @@ function remember(cache, key, value) {
 
 function normalizedTrack(track) {
   return {
+    ...track,
     id: track?.id || track?.itemId || null,
     uri: track?.uri || track?.itemUri || null,
     title: track?.title || track?.name || "",
     artist: track?.artist || track?.artistNames?.join(", ") || "",
     album: track?.albumName || track?.album?.name || "",
     durationMs: Math.max(0, Number(track?.durationMs || track?.duration_ms) || 0),
+    isLocal: Boolean(track?.isLocal || String(track?.uri || "").startsWith("spool:local:")),
+    embeddedLyrics: String(track?.lyrics || ""),
   };
 }
 
@@ -36,34 +37,143 @@ export class LyricsService {
     fetchImpl = globalThis.fetch,
     onDiagnostic,
     baseUrl = DEFAULT_LRCLIB_BASE,
+    store = new LyricsStore(),
   } = {}) {
     if (typeof fetchImpl !== "function") throw new TypeError("LyricsService requires fetch.");
     this.fetchImpl = fetchImpl;
     this.onDiagnostic = onDiagnostic;
     this.baseUrl = String(baseUrl || DEFAULT_LRCLIB_BASE).replace(/\/$/u, "");
+    this.store = store;
     this.cache = new Map();
   }
 
-  async getLyrics(input, { signal } = {}) {
+  async getLyrics(input, { signal, force = false } = {}) {
     const track = normalizedTrack(input);
     if (!track.title) return noLyrics("missing-track");
-    const key = lyricsKey(track);
-    if (this.cache.has(key)) return this.cache.get(key);
+    const key = lyricsRecordKey(track);
+    if (!key) return noLyrics("missing-track");
 
-    try {
-      const lyrics = await this.#fetchLrclib(track, signal);
-      if (lyrics?.lines.length || lyrics?.instrumental) {
+    if (!force && this.cache.has(key)) return this.cache.get(key);
+    if (!force) {
+      const stored = await this.store.get(key);
+      // A saved user edit is absolute. Never replace it automatically.
+      if (stored?.userModified || stored?.source === "manual") {
+        const lyrics = lyricsFromRecord(stored);
         remember(this.cache, key, lyrics);
         return lyrics;
       }
+
+      // Embedded local metadata outranks provider data, including a cached
+      // LRCLIB result or an earlier automatic negative lookup.
+      if (track.isLocal && track.embeddedLyrics.trim()) {
+        const record = stored?.source === "embedded" && stored.text === track.embeddedLyrics
+          ? stored
+          : await this.store.put({
+              key,
+              text: track.embeddedLyrics,
+              source: "embedded",
+              userModified: false,
+              autoFetchAttempted: false,
+              updatedAt: Date.now(),
+            });
+        const lyrics = lyricsFromRecord(record);
+        remember(this.cache, key, lyrics);
+        return lyrics;
+      }
+
+      if (stored?.text || stored?.instrumental) {
+        const lyrics = lyricsFromRecord(stored);
+        remember(this.cache, key, lyrics);
+        return lyrics;
+      }
+      if (stored?.autoFetchAttempted) return noLyrics("not-found");
+    }
+
+    try {
+      const result = await this.#fetchBestLrclib(track, signal);
+      if (result) {
+        const text = result.syncedLyrics || result.plainLyrics || "";
+        const record = await this.store.put({
+          key,
+          text,
+          source: "lrclib",
+          userModified: false,
+          autoFetchAttempted: true,
+          lrclibResultId: result.id ?? null,
+          instrumental: Boolean(result.instrumental),
+          updatedAt: Date.now(),
+        });
+        const lyrics = lyricsFromRecord(record);
+        remember(this.cache, key, lyrics);
+        return lyrics;
+      }
+      await this.store.put({
+        key,
+        text: "",
+        source: "none",
+        userModified: false,
+        autoFetchAttempted: true,
+        instrumental: false,
+        updatedAt: Date.now(),
+      });
+      return noLyrics("not-found");
     } catch (error) {
       if (error?.name === "AbortError") throw error;
       this.#diagnostic("lrclib", error);
+      // Outages are not persisted as negative matches.
+      return noLyrics("provider-error");
     }
+  }
 
-    // A provider outage is not proof that a track has no lyrics. Leave empty
-    // results uncached so revisiting the song retries after service recovery.
-    return noLyrics();
+  async search(input, { signal } = {}) {
+    const track = normalizedTrack(input);
+    if (!track.title) return [];
+    const results = await this.#searchLrclib(track, signal);
+    const best = chooseLrclibResult(track, results);
+    return results.map((result) => ({
+      id: result.id ?? null,
+      title: result.trackName || result.name || track.title,
+      artist: result.artistName || result.artist || track.artist,
+      album: result.albumName || "",
+      durationMs: Number.isFinite(Number(result.duration)) ? Number(result.duration) * 1000 : 0,
+      synced: Boolean(result.syncedLyrics),
+      instrumental: Boolean(result.instrumental),
+      text: result.syncedLyrics || result.plainLyrics || "",
+      best: result === best,
+      raw: result,
+    }));
+  }
+
+  async save(input, text, { source = "manual", userModified = true, lrclibResultId = null } = {}) {
+    const track = normalizedTrack(input);
+    const key = lyricsRecordKey(track);
+    if (!key) throw new TypeError("A playable song is required to save lyrics.");
+    const record = await this.store.put({
+      key,
+      text: String(text || ""),
+      source,
+      userModified,
+      autoFetchAttempted: true,
+      lrclibResultId,
+      instrumental: false,
+      updatedAt: Date.now(),
+    });
+    this.cache.delete(key);
+    const lyrics = lyricsFromRecord(record);
+    remember(this.cache, key, lyrics);
+    return lyrics;
+  }
+
+  async clear(input) {
+    const key = lyricsRecordKey(normalizedTrack(input));
+    if (!key) return;
+    this.cache.delete(key);
+    await this.store.delete(key);
+  }
+
+  async getRecord(input) {
+    const key = lyricsRecordKey(normalizedTrack(input));
+    return key ? this.store.get(key) : null;
   }
 
   #diagnostic(provider, error) {
@@ -75,7 +185,7 @@ export class LyricsService {
     });
   }
 
-  async #fetchLrclib(track, signal) {
+  async #fetchBestLrclib(track, signal) {
     const exact = new URLSearchParams({
       track_name: track.title,
       artist_name: track.artist,
@@ -90,53 +200,40 @@ export class LyricsService {
       if (error?.name === "AbortError") throw error;
       if (error?.status !== 404) this.#diagnostic("lrclib-exact", error);
     }
+    if (candidate?.syncedLyrics || candidate?.plainLyrics || candidate?.instrumental) return candidate;
+    const results = await this.#searchLrclib(track, signal);
+    return chooseLrclibResult(track, results);
+  }
 
-    if (!candidate?.syncedLyrics) {
-      const fieldSearch = new URLSearchParams({
-        track_name: track.title,
-        artist_name: track.artist,
+  async #searchLrclib(track, signal) {
+    const fieldSearch = new URLSearchParams({
+      track_name: track.title,
+      artist_name: track.artist,
+    });
+    if (track.album) fieldSearch.set("album_name", track.album);
+    const broadSearch = new URLSearchParams({ q: `${track.title} ${track.artist}`.trim() });
+    const runSearch = (params) => this.#fetchJson(`${this.baseUrl}/search?${params}`, { signal })
+      .catch((error) => {
+        if (error?.name === "AbortError") throw error;
+        this.#diagnostic("lrclib-search", error);
+        return [];
       });
-      if (track.album) fieldSearch.set("album_name", track.album);
-      const broadSearch = new URLSearchParams({
-        q: `${track.title} ${track.artist}`.trim(),
-      });
-      const runSearch = (params) => this.#fetchJson(`${this.baseUrl}/search?${params}`, { signal })
-        .catch((error) => {
-          if (error?.name === "AbortError") throw error;
-          return [];
-        });
-      const fieldResults = await runSearch(fieldSearch);
-      let results = uniqueLrclibResults(Array.isArray(fieldResults) ? fieldResults : []);
-      let matched = chooseLrclibResult(track, results);
-      if (!matched?.syncedLyrics) {
-        const broadResults = await runSearch(broadSearch);
-        results = uniqueLrclibResults([
-          ...results,
-          ...(Array.isArray(broadResults) ? broadResults : []),
-        ]);
-        matched = chooseLrclibResult(track, results);
-      }
-      if (matched?.syncedLyrics || !candidate?.plainLyrics) candidate = matched;
-    }
-    return normalizeLrclibLyrics(candidate);
+    const fieldResults = await runSearch(fieldSearch);
+    const broadResults = await runSearch(broadSearch);
+    return uniqueLrclibResults([
+      ...(Array.isArray(fieldResults) ? fieldResults : []),
+      ...(Array.isArray(broadResults) ? broadResults : []),
+    ]).filter((item) => item.syncedLyrics || item.plainLyrics || item.instrumental);
   }
 
   async #fetchJson(url, { signal } = {}) {
     let response;
     try {
-      // Keep this a CORS-simple GET. The original single-file player uses the
-      // same direct request shape; adding a custom client header would force a
-      // preflight that LRCLIB intentionally does not allow from arbitrary web
-      // origins.
       response = await Reflect.apply(this.fetchImpl, globalThis, [url, { signal }]);
     } catch (cause) {
       if (cause?.name === "AbortError") throw cause;
-      throw new LyricsProviderError("Could not reach LRCLIB.", {
-        provider: "lrclib",
-        cause,
-      });
+      throw new LyricsProviderError("Could not reach LRCLIB.", { provider: "lrclib", cause });
     }
-
     const text = await response.text();
     if (!response.ok) {
       throw new LyricsProviderError(`LRCLIB returned HTTP ${response.status}.`, {
@@ -145,15 +242,35 @@ export class LyricsService {
       });
     }
     if (!text) return null;
-    try {
-      return JSON.parse(text);
-    } catch (cause) {
-      throw new LyricsProviderError("LRCLIB returned invalid JSON.", {
-        provider: "lrclib",
-        cause,
-      });
-    }
+    try { return JSON.parse(text); }
+    catch (cause) { throw new LyricsProviderError("LRCLIB returned invalid JSON.", { provider: "lrclib", cause }); }
   }
+}
+
+export function lyricsFromText(text, { source = "manual", detail = null, instrumental = false } = {}) {
+  const raw = String(text || "");
+  if (instrumental) return { source, detail: detail || "instrumental", rawText: raw, synced: false, instrumental: true, lines: [] };
+  const parsed = parseLrc(raw);
+  if (parsed.length) {
+    return { source, detail: detail || "synced", rawText: raw, synced: true, instrumental: false, lines: parsed };
+  }
+  const lines = raw.split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => ({ type: "static", startMs: null, endMs: null, text: line }));
+  return lines.length
+    ? { source, detail: detail || "plain", rawText: raw, synced: false, instrumental: false, lines }
+    : noLyrics("empty");
+}
+
+export function lyricsToText(lyrics) {
+  if (typeof lyrics?.rawText === "string") return lyrics.rawText;
+  if (!lyrics?.lines?.length) return "";
+  if (!lyrics.synced) return lyrics.lines.map((line) => line.text || "").join("\n");
+  return lyrics.lines
+    .filter((line) => line.type !== "interlude" || line.text)
+    .map((line) => `[${formatLrcTime(line.startMs)}] ${line.text || ""}`.trimEnd())
+    .join("\n");
 }
 
 export function parseLrc(text) {
@@ -171,25 +288,19 @@ export function parseLrc(text) {
 
 export function normalizeLrclibLyrics(data) {
   if (!data) return null;
-  if (data.instrumental) {
-    return { source: "lrclib", detail: "instrumental", synced: false, instrumental: true, lines: [] };
-  }
-  if (data.syncedLyrics) {
-    return {
-      source: "lrclib",
-      detail: "synced",
-      synced: true,
-      instrumental: false,
-      lines: parseLrc(data.syncedLyrics),
-    };
-  }
-  const lines = String(data.plainLyrics || "").split(/\r?\n/u)
-    .map((text) => cleanText(text))
-    .filter(Boolean)
-    .map((text) => ({ type: "static", startMs: null, endMs: null, text }));
-  return lines.length
-    ? { source: "lrclib", detail: "plain", synced: false, instrumental: false, lines }
-    : null;
+  return lyricsFromText(data.syncedLyrics || data.plainLyrics || "", {
+    source: "lrclib",
+    detail: data.syncedLyrics ? "synced" : data.instrumental ? "instrumental" : "plain",
+    instrumental: Boolean(data.instrumental),
+  });
+}
+
+function lyricsFromRecord(record) {
+  return lyricsFromText(record.text, {
+    source: record.source || "manual",
+    detail: record.userModified ? "edited" : record.source,
+    instrumental: record.instrumental,
+  });
 }
 
 function chooseLrclibResult(track, results) {
@@ -206,8 +317,8 @@ function chooseLrclibResult(track, results) {
     return titleMatch && artistMatch && durationMatch;
   });
   return matching.find((item) => item.syncedLyrics)
-    || candidates.find((item) => item.syncedLyrics)
     || matching[0]
+    || candidates.find((item) => item.syncedLyrics)
     || candidates[0]
     || null;
 }
@@ -245,6 +356,14 @@ function withLineEnds(lines) {
   });
 }
 
+function formatLrcTime(milliseconds) {
+  const ms = Math.max(0, Number(milliseconds) || 0);
+  const minutes = Math.floor(ms / 60_000);
+  const seconds = Math.floor((ms % 60_000) / 1000);
+  const centiseconds = Math.floor((ms % 1000) / 10);
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(centiseconds).padStart(2, "0")}`;
+}
+
 function cleanText(input) {
   return String(input || "").replace(/\s+/gu, " ").trim();
 }
@@ -254,5 +373,5 @@ function comparable(input) {
 }
 
 function noLyrics(detail = "not-found") {
-  return { source: "none", detail, synced: false, instrumental: false, lines: [] };
+  return { source: "none", detail, rawText: "", synced: false, instrumental: false, lines: [] };
 }

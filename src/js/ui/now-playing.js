@@ -70,9 +70,8 @@ export function renderPlaybackControls(playback = {}) {
   setButtonLabel(elements.play, paused ? 'Play' : 'Pause');
   setButtonLabel(elements.immersivePlay, paused ? 'Play' : 'Pause');
 
-  const shuffle = Boolean(playback.shuffleEnabled ?? playback.shuffle ?? playback.shuffleState);
-  reflectToggle(elements.shuffle, shuffle, shuffle ? 'Shuffle on' : 'Shuffle');
-  reflectToggle(elements.immersiveShuffle, shuffle, shuffle ? 'Shuffle on' : 'Shuffle');
+  reflectDisabledShuffle(elements.shuffle);
+  reflectDisabledShuffle(elements.immersiveShuffle);
 
   const repeatMode = normalizeRepeat(playback.repeatMode || playback.repeat || playback.repeatState);
   reflectRepeat(elements.repeat, repeatMode);
@@ -97,10 +96,22 @@ export function setPlaybackControlsEnabled(enabled, reason = 'Player not ready')
   ].filter(Boolean);
 
   controls.forEach((control) => {
-    control.toggleAttribute('disabled', !enabled && control.tagName === 'BUTTON');
-    control.setAttribute('aria-disabled', String(!enabled));
-    if (!enabled) control.title = reason;
+    const isShuffle = control === elements.shuffle || control === elements.immersiveShuffle;
+    control.toggleAttribute('disabled', isShuffle || (!enabled && control.tagName === 'BUTTON'));
+    control.setAttribute('aria-disabled', String(isShuffle || !enabled));
+    if (isShuffle) control.title = 'Shuffle is temporarily disabled for hybrid playlists';
+    else if (!enabled) control.title = reason;
   });
+}
+
+function reflectDisabledShuffle(button) {
+  if (!button) return;
+  button.classList.remove('active');
+  button.disabled = true;
+  button.setAttribute('aria-disabled', 'true');
+  button.setAttribute('aria-pressed', 'false');
+  button.setAttribute('aria-label', 'Shuffle disabled');
+  button.title = 'Shuffle is temporarily disabled for hybrid playlists';
 }
 
 function normalizeRepeat(mode) {

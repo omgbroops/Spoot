@@ -13,21 +13,31 @@ backend, or Spotify Client Secret.
 - Spotify Authorization Code with PKCE and session restoration
 - automatic registration of a Web Playback SDK device named `Spool`
 - a device-aware **Listen here** handoff and custom Spotify Connect picker
-- play/pause, previous/next, seeking, shuffle, and repeat
+- play/pause, previous/next, seeking, and repeat; shuffle is intentionally disabled while hybrid local/Spotify ordering is active
 - live browser volume, Media Session metadata, and optional media-key skipping
 - normalized Spotify playback state, artwork, progress, and queue rendering
-- queue selection that repositions the active album/playlist in one playback
-  request, while preserving Spotify's appended recommendation tail when the
-  selected song is outside that context
+- queue selection that advances Spotify's real open-ended queue one item at a
+  time, preserving the active album/playlist context and Spotify's appended
+  recommendation tail instead of replacing it with a finite URI list
 - Liked Songs plus fully paginated owned/collaborative playlists; playlist
   playback keeps the full Spotify context and selected position
+- session-only bounded caches for search, the playlist list, opened playlist
+  contents, and Liked Songs; explicit refresh controls bypass the cache
+- an Add to playlist picker with client-side filtering, lazy membership checks,
+  Spotify and Spool-only Liked Songs support, and a separate full Create Playlist form
+- owned-playlist editing for name, description, privacy, custom cover, song
+  removal, and drag-to-reorder with Spotify snapshot-aware rollback
+- a separate Local Files collection backed by IndexedDB, with imports from the
+  computer or Dropbox, isolated browser-audio playback, and client-only placement
+  inside Spotify playlists and Spool's local Liked Songs overlay
 - playlist song counts, exact loaded duration, album names, and track durations
 - metadata-only display for followed playlists Spotify will not expose
 - Spotify catalog search across songs, artists, albums, and playlists
 - album pages with complete paginated track lists, release metadata, duration,
   and context-preserving playback from any selected song
 - synced or plain lyrics in the floating and immersive players, with
-  click-to-seek and timed auto-follow
+  click-to-seek, persistent manual/embedded-over-LRCLIB priority, editable text,
+  provider result selection, and the original timestamp-sync workflow
 - draggable widget positions and responsive immersive mode
 - an explicit mock adapter that exercises the same controller and UI boundary
 
@@ -64,8 +74,11 @@ and [Web Playback SDK requirements](https://developer.spotify.com/documentation/
 The SDK currently requires `streaming`, `user-read-private`, and
 `user-read-email`; Spool requests the email scope for SDK authorization but
 does not read, display, or store the account's email address.
-Library access additionally uses `user-library-read`, `playlist-read-private`,
-and `playlist-read-collaborative`.
+Library access uses `user-library-read`, `playlist-read-private`, and
+`playlist-read-collaborative`. Adding/removing songs and creating or editing playlists also uses
+`user-library-modify`, `playlist-modify-private`, `playlist-modify-public`, and
+`ugc-image-upload` for custom playlist covers. Existing Spool sessions must log
+out and authorize one more time after these scopes are added.
 
 1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
 2. Register this exact redirect URI: `http://127.0.0.1:5173/`
@@ -102,6 +115,41 @@ Spool removes that legacy parameter if it is present.
 Do not use `localhost`, a different port, or `file://`; Spotify compares the
 redirect URI exactly. The complete authenticated procedure is in
 [MANUAL_TESTING.md](./MANUAL_TESTING.md).
+
+
+## Session cache and Local Files
+
+Spotify catalog data is cached only for the lifetime of the tab. Spool keeps a
+bounded number of search results and recently opened detail pages, retains the
+playlist list once per session, and stores at most three fully opened Spotify
+collections. It does not preload every playlist. The refresh button in Library
+reloads either the playlist list or the currently open collection from Spotify.
+
+Local Files are different: files selected from the computer or imported from
+Dropbox are user-provided media and are stored persistently in the
+`spool-local-media` IndexedDB database. Audio blobs are read only when a local
+song is played, and artwork object URLs are capped so browsing local files does
+not grow memory without bound. Starting a local file pauses Spotify; starting a
+Spotify item pauses the local `<audio>` player.
+
+## Hybrid playlists and lyrics
+
+Spotify remains authoritative for every Spotify song. Spool stores only local-file
+placements in IndexedDB, anchored between stable Spotify occurrences so duplicate
+tracks can still be distinguished. Dragging a Spotify row sends one Spotify reorder
+request; dragging a local row updates only Spool's overlay. Deleting a song from
+Local Files removes its blob, metadata, lyrics, and every client-only placement.
+
+Hybrid playback follows the merged order and switches between the Web Playback SDK
+and one local `<audio>` element. The final remote item is released back to Spotify's
+open-ended queue, while an all-local overlay resumes the Spotify session that was
+playing before it. Shuffle is disabled in this release because Spotify cannot shuffle
+files it does not know exist.
+
+Lyrics are stored in the `spool-lyrics` IndexedDB database. User edits have highest
+priority, then embedded local-file lyrics, then the previously selected LRCLIB result.
+Spool performs at most one automatic LRCLIB lookup per song and persists a negative
+match; the LRCLIB button always allows a manual refresh.
 
 ## Tests
 

@@ -3,14 +3,31 @@ import { DEFAULT_COVER, artistText, artworkUrl } from "./now-playing.js";
 let handlers = {};
 let cleanup;
 let lastSourceId = null;
+let dragState = null;
 
 export function setupLibrary(nextHandlers = {}) {
   cleanup?.();
   handlers = { ...nextHandlers };
   const content = document.getElementById("library-content");
   const back = document.getElementById("library-back");
+  const refresh = document.getElementById("library-refresh");
   if (!content) return () => {};
+
   const onClick = (event) => {
+    const edit = event.target.closest("[data-library-edit-playlist]");
+    if (edit) return handlers.onEditPlaylist?.(edit.dataset.libraryEditPlaylist);
+
+    const remove = event.target.closest("[data-library-remove-index]");
+    if (remove) {
+      return handlers.onRemovePlaylistItem?.({
+        sourceId: remove.dataset.librarySourceId,
+        index: Number(remove.dataset.libraryRemoveIndex),
+      });
+    }
+
+    const deleteLocal = event.target.closest("[data-library-delete-local]");
+    if (deleteLocal) return handlers.onDeleteLocal?.(deleteLocal.dataset.libraryDeleteLocal);
+
     const source = event.target.closest("[data-library-source]");
     if (source && !source.disabled) {
       lastSourceId = source.dataset.librarySource;
@@ -20,32 +37,96 @@ export function setupLibrary(nextHandlers = {}) {
     if (playSource && !playSource.disabled) {
       return handlers.onPlaySource?.({
         contextUri: playSource.dataset.libraryPlaySource || null,
-        contextOnly: true,
+        localSourceId: playSource.dataset.libraryLocalSource || null,
+        hybridPlaylistId: playSource.dataset.libraryHybridPlaylist || null,
+        hybridPosition: optionalInteger(playSource.dataset.libraryHybridPosition),
+        contextOnly: !playSource.dataset.libraryLocalSource && !playSource.dataset.libraryHybridPlaylist,
       });
     }
     const artist = event.target.closest("[data-library-open-artist]");
     if (artist && !artist.disabled) return handlers.onOpenArtist?.({ id: artist.dataset.libraryOpenArtist });
     const album = event.target.closest("[data-library-open-album]");
     if (album && !album.disabled) return handlers.onOpenAlbum?.({ id: album.dataset.libraryOpenAlbum });
+    const add = event.target.closest("[data-library-add-playlist]");
+    if (add && !add.disabled) {
+      return handlers.onAddToPlaylist?.({
+        id: add.dataset.libraryTrackId || null,
+        localId: add.dataset.libraryLocalId || null,
+        uri: add.dataset.libraryAddPlaylist || null,
+        title: add.dataset.libraryTrackTitle || "Song",
+      });
+    }
     const track = event.target.closest("[data-library-play]");
     if (track && !track.disabled) {
       return handlers.onPlay?.({
         uri: track.dataset.libraryPlay,
         contextUri: track.dataset.libraryContext || null,
         contextPosition: optionalInteger(track.dataset.libraryPosition),
+        hybridPlaylistId: track.dataset.libraryHybridPlaylist || null,
+        hybridPosition: optionalInteger(track.dataset.libraryHybridPosition),
         sourceKind: track.dataset.librarySourceKind || null,
+        localId: track.dataset.libraryLocalId || null,
       });
     }
     if (event.target.closest("[data-library-back]")) return handlers.onBack?.();
     if (event.target.closest("[data-library-more]")) return handlers.onLoadMore?.();
     if (event.target.closest("[data-library-refresh]")) return handlers.onRefresh?.();
   };
+
+  const onDragStart = (event) => {
+    const row = event.target.closest("[data-library-drag-index]");
+    if (!row) return;
+    dragState = {
+      sourceId: row.dataset.librarySourceId,
+      fromIndex: Number(row.dataset.libraryDragIndex),
+    };
+    row.classList.add("dragging-row");
+    event.dataTransfer?.setData("text/plain", String(dragState.fromIndex));
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+  };
+  const onDragOver = (event) => {
+    if (!dragState) return;
+    const row = event.target.closest("[data-library-drag-index]");
+    if (!row || row.dataset.librarySourceId !== dragState.sourceId) return;
+    event.preventDefault();
+    content.querySelectorAll(".drag-over").forEach((node) => node.classList.remove("drag-over"));
+    row.classList.add("drag-over");
+  };
+  const onDrop = (event) => {
+    const row = event.target.closest("[data-library-drag-index]");
+    if (!row || !dragState || row.dataset.librarySourceId !== dragState.sourceId) return;
+    event.preventDefault();
+    const payload = {
+      sourceId: dragState.sourceId,
+      fromIndex: dragState.fromIndex,
+      toIndex: Number(row.dataset.libraryDragIndex),
+    };
+    dragState = null;
+    content.querySelectorAll(".dragging-row,.drag-over").forEach((node) => node.classList.remove("dragging-row", "drag-over"));
+    handlers.onReorderPlaylistItem?.(payload);
+  };
+  const onDragEnd = () => {
+    dragState = null;
+    content.querySelectorAll(".dragging-row,.drag-over").forEach((node) => node.classList.remove("dragging-row", "drag-over"));
+  };
+
   const onBack = () => handlers.onBack?.();
+  const onRefresh = () => handlers.onRefresh?.();
   content.addEventListener("click", onClick);
+  content.addEventListener("dragstart", onDragStart);
+  content.addEventListener("dragover", onDragOver);
+  content.addEventListener("drop", onDrop);
+  content.addEventListener("dragend", onDragEnd);
   back?.addEventListener("click", onBack);
+  refresh?.addEventListener("click", onRefresh);
   cleanup = () => {
     content.removeEventListener("click", onClick);
+    content.removeEventListener("dragstart", onDragStart);
+    content.removeEventListener("dragover", onDragOver);
+    content.removeEventListener("drop", onDrop);
+    content.removeEventListener("dragend", onDragEnd);
     back?.removeEventListener("click", onBack);
+    refresh?.removeEventListener("click", onRefresh);
     handlers = {};
     cleanup = undefined;
   };
@@ -68,7 +149,7 @@ export function renderLibrarySources({ status = "ready", sources = [], message }
 
   const note = document.createElement("p");
   note.className = "library-api-note";
-  note.textContent = "Spotify returns playlists as a flat list. Playlist folders and DJ are not exposed to third-party apps.";
+  note.textContent = "Spotify playlists are loaded only when opened. Local Files and Spool-only placements stay in this browser.";
   content.append(note);
   if (lastSourceId) scheduleFocus(() => (
     [...content.querySelectorAll("[data-library-source]")]
@@ -91,7 +172,7 @@ export function renderLibraryDetail({
   if (!content || !source) return;
   setBackVisible(true);
   content.replaceChildren();
-  content.append(detailHeader(source, total, durationMs, complete));
+  content.append(detailHeader(source, total, durationMs, complete, items));
   if (status === "loading") scheduleFocus(() => document.getElementById("library-back"));
   if (status === "loading") return content.append(libraryMessage("Loading songs…"));
   if (status === "error" || message) {
@@ -130,7 +211,7 @@ function sourceRow(source) {
   copy.className = "library-source-copy";
   title.textContent = source.name;
   const count = Number.isFinite(source.total) ? `${source.total} song${source.total === 1 ? "" : "s"}` : null;
-  meta.textContent = [source.kind === "liked" ? "Saved songs" : source.ownerName, count].filter(Boolean).join(" · ");
+  meta.textContent = [source.kind === "liked" ? "Saved songs" : source.kind === "local" ? "Stored in this browser" : source.ownerName, count].filter(Boolean).join(" · ");
   copy.append(title, meta);
   row.append(copy);
   if (!source.canBrowse) {
@@ -142,7 +223,7 @@ function sourceRow(source) {
   return row;
 }
 
-function detailHeader(source, total, durationMs, complete) {
+function detailHeader(source, total, durationMs, complete, items) {
   const header = document.createElement("div");
   const copy = document.createElement("div");
   const title = document.createElement("h2");
@@ -160,13 +241,26 @@ function detailHeader(source, total, durationMs, complete) {
       : null,
   ].filter(Boolean).join(" · ");
   actions.className = "library-detail-actions";
-  if (source.kind === "playlist" && source.uri) {
+  if ((source.kind === "playlist" && source.uri) || source.kind === "local" || source.kind === "liked") {
+    const firstPlayable = items.findIndex((item) => item?.playable && item?.uri);
     const play = document.createElement("button");
     play.type = "button";
     play.className = "btn primary";
-    play.dataset.libraryPlaySource = source.uri;
-    play.textContent = "Play playlist";
+    play.dataset.libraryPlaySource = source.uri || "";
+    play.dataset.libraryHybridPlaylist = source.id;
+    play.dataset.libraryHybridPosition = String(Math.max(0, firstPlayable));
+    if (source.kind === "local") play.dataset.libraryLocalSource = source.id;
+    play.textContent = source.kind === "local" ? "Play local files" : source.kind === "liked" ? "Play Liked Songs" : "Play playlist";
+    play.disabled = firstPlayable < 0;
     actions.append(play);
+  }
+  if (source.kind === "playlist" && source.owned) {
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "btn";
+    edit.dataset.libraryEditPlaylist = source.id;
+    edit.textContent = "Edit details";
+    actions.append(edit);
   }
   copy.append(title, meta, actions);
   header.append(copy);
@@ -181,125 +275,139 @@ function trackRow(entry, source, index, currentUri) {
   const meta = document.createElement("span");
   const album = document.createElement("button");
   const duration = document.createElement("span");
+  const actions = document.createElement("span");
   const playable = Boolean(entry.playable && entry.uri);
-  row.className = `library-track${playable ? "" : " unavailable"}${currentUri && entry.uri === currentUri ? " playing" : ""}`;
+  const local = Boolean(entry.isLocal || String(entry.uri || "").startsWith("spool:local:"));
+  const canModify = source.kind === "playlist" && (source.owned || source.collaborative);
+  row.className = `library-track${playable ? "" : " unavailable"}${currentUri && entry.uri === currentUri ? " playing" : ""}${local ? " local-overlay-row" : ""}`;
   row.title = entry.unavailableReason || `Play ${entry.title}`;
-  image.src = artworkUrl(entry.item || entry) || DEFAULT_COVER;
+  image.className = "library-track-cover";
+  image.src = artworkUrl(entry.item || entry) || entry.artworkUrl || DEFAULT_COVER;
   image.alt = "";
   image.loading = "lazy";
   image.draggable = false;
+
   copy.className = "library-track-copy";
   title.type = "button";
   title.className = "catalog-track-title";
+  title.textContent = entry.title || "Unknown song";
   title.disabled = !playable;
   if (playable) {
     title.dataset.libraryPlay = entry.uri;
-    if (source?.uri && source.kind === "playlist") title.dataset.libraryContext = source.uri;
-    title.dataset.librarySourceKind = source?.kind || "";
-    title.dataset.libraryPosition = String(index);
+    if (source.uri) title.dataset.libraryContext = source.uri;
+    if (Number.isInteger(entry.spotifyPosition ?? entry.position)) title.dataset.libraryPosition = String(entry.spotifyPosition ?? entry.position);
+    title.dataset.librarySourceKind = source.kind;
+    title.dataset.libraryHybridPlaylist = source.id;
+    title.dataset.libraryHybridPosition = String(index);
+    if (local) title.dataset.libraryLocalId = entry.localId || entry.id;
   }
-  title.textContent = entry.title || "Unavailable item";
   meta.className = "catalog-link-row";
-  appendArtistLinks(meta, entry.item?.artists || entry.artists, entry.item ? artistText(entry.item) : entry.artist);
+  appendArtistLinks(meta, entry);
   copy.append(title, meta);
+
   album.type = "button";
-  album.className = "catalog-text-link library-track-album";
-  album.textContent = entry.albumName || "—";
-  album.disabled = !entry.albumId;
+  album.className = "library-track-album catalog-text-link";
+  album.textContent = entry.albumName || (local ? "Local Files" : "—");
   if (entry.albumId) album.dataset.libraryOpenAlbum = entry.albumId;
+  else album.disabled = true;
+
   duration.className = "library-track-duration";
   duration.textContent = formatTrackDuration(entry.durationMs);
-  row.append(image, copy, album, duration);
-  if (!playable) {
-    const reason = document.createElement("span");
-    reason.className = "library-item-state";
-    reason.textContent = entry.item?.type === "episode" ? "Episode" : "Unavailable";
-    row.append(reason);
+  actions.className = "library-track-actions";
+  if (/^(?:spotify:track|spool:local):/u.test(entry.uri || "")) {
+    const add = actionButton("Add to playlist", plusIcon());
+    add.dataset.libraryAddPlaylist = entry.uri;
+    add.dataset.libraryTrackId = entry.id || "";
+    add.dataset.libraryLocalId = entry.localId || "";
+    add.dataset.libraryTrackTitle = entry.title || "Song";
+    actions.append(add);
   }
+  if (source.kind === "local" && local) {
+    const remove = actionButton("Delete local file", removeIcon());
+    remove.dataset.libraryDeleteLocal = entry.localId || entry.id;
+    actions.append(remove);
+  } else if ((canModify || (source.kind === "liked" && local))) {
+    const remove = actionButton("Remove from playlist", removeIcon());
+    remove.dataset.libraryRemoveIndex = String(index);
+    remove.dataset.librarySourceId = source.id;
+    actions.append(remove);
+  }
+
+  if (canModify) {
+    row.draggable = true;
+    row.dataset.libraryDragIndex = String(index);
+    row.dataset.librarySourceId = source.id;
+  }
+  row.append(image, copy, album, duration, actions);
   return row;
 }
 
-function appendArtistLinks(container, artists, fallback) {
-  const valid = Array.isArray(artists) ? artists.filter((artist) => artist?.name) : [];
-  if (!valid.length) {
-    container.textContent = fallback || "Unknown artist";
+function appendArtistLinks(container, entry) {
+  const artists = entry.artists || entry.item?.artists || [];
+  if (!artists.length) {
+    container.textContent = artistText(entry.item || entry) || "Unknown artist";
     return;
   }
-  valid.forEach((artist, index) => {
+  artists.forEach((artist, index) => {
     if (index) container.append(document.createTextNode(", "));
-    if (!artist.id) return container.append(document.createTextNode(artist.name));
-    const link = document.createElement("button");
-    link.type = "button";
-    link.className = "catalog-text-link";
-    link.dataset.libraryOpenArtist = artist.id;
-    link.textContent = artist.name;
-    container.append(link);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "catalog-text-link";
+    button.textContent = artist.name || "Unknown artist";
+    if (artist.id) button.dataset.libraryOpenArtist = artist.id;
+    else button.disabled = true;
+    container.append(button);
   });
 }
 
 function trackHeader() {
-  const header = document.createElement("div");
-  header.className = "library-track-head";
-  header.setAttribute("aria-hidden", "true");
-  ["", "Title", "Album", "Time", ""].forEach((label) => {
-    const cell = document.createElement("span");
-    cell.textContent = label;
-    header.append(cell);
-  });
-  return header;
+  const row = document.createElement("div");
+  row.className = "library-track-head";
+  row.innerHTML = "<span></span><span>Title</span><span>Album</span><span>Time</span><span></span>";
+  return row;
 }
 
-export function formatCollectionDuration(durationMs) {
-  const totalSeconds = Math.max(0, Math.floor((Number(durationMs) || 0) / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours) return `${hours} hr ${minutes} min`;
-  if (minutes) return `${minutes} min ${seconds} sec`;
-  return `${seconds} sec`;
+function actionButton(label, icon) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "track-action-button";
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.innerHTML = icon;
+  return button;
 }
 
-export function formatTrackDuration(durationMs) {
-  const totalSeconds = Math.max(0, Math.floor((Number(durationMs) || 0) / 1000));
-  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
+function plusIcon() {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>';
+}
+
+function removeIcon() {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg>';
 }
 
 function sourceCover(source, className) {
-  if (source.artworkUrl) {
-    const image = document.createElement("img");
-    image.className = className;
-    image.src = source.artworkUrl;
-    image.alt = "";
-    image.loading = "lazy";
-    return image;
-  }
-  const fallback = document.createElement("span");
-  fallback.className = `${className} library-cover-fallback`;
-  fallback.setAttribute("aria-hidden", "true");
-  fallback.innerHTML = source.kind === "liked"
-    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1.1-1a5.5 5.5 0 0 0-7.8 7.8l1.1 1L12 21l7.8-7.6a5.5 5.5 0 0 0 1-8.8Z"/></svg>'
-    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg>';
-  return fallback;
+  const image = document.createElement("img");
+  image.className = className;
+  image.src = source.artworkUrl || (source.kind === "liked" ? likedCover() : DEFAULT_COVER);
+  image.alt = "";
+  image.loading = "lazy";
+  image.draggable = false;
+  return image;
 }
 
-function libraryMessage(message) {
-  const empty = document.createElement("div");
-  empty.className = "empty library-message";
-  empty.textContent = message;
-  return empty;
+function likedCover() {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><defs><linearGradient id="g" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#5d35e8"/><stop offset="1" stop-color="#a8c7ff"/></linearGradient></defs><rect width="128" height="128" rx="22" fill="url(#g)"/><path d="M64 91 31 59c-18-18 9-43 27-25l6 6 6-6c18-18 45 7 27 25Z" fill="white"/></svg>')}`;
 }
 
-function errorMessage(message) {
-  const wrap = document.createElement("div");
-  wrap.className = "library-error";
-  wrap.append(libraryMessage(message || "Spotify library is temporarily unavailable."));
-  const retry = document.createElement("button");
-  retry.className = "btn";
-  retry.type = "button";
-  retry.dataset.libraryRefresh = "";
-  retry.textContent = "Retry";
-  wrap.append(retry);
-  return wrap;
+function libraryMessage(text) {
+  const node = document.createElement("div");
+  node.className = "empty library-message";
+  node.textContent = text;
+  return node;
+}
+
+function errorMessage(text) {
+  return libraryMessage(text || "Your library is temporarily unavailable.");
 }
 
 function openSpotifyLink(url) {
@@ -307,14 +415,9 @@ function openSpotifyLink(url) {
   link.className = "btn library-open-spotify";
   link.href = url;
   link.target = "_blank";
-  link.rel = "noopener noreferrer";
+  link.rel = "noreferrer";
   link.textContent = "Open in Spotify";
   return link;
-}
-
-function scheduleFocus(findTarget) {
-  const schedule = globalThis.requestAnimationFrame || ((callback) => setTimeout(callback, 0));
-  schedule(() => findTarget()?.focus({ preventScroll: true }));
 }
 
 function setBackVisible(visible) {
@@ -322,7 +425,27 @@ function setBackVisible(visible) {
   if (back) back.hidden = !visible;
 }
 
+function scheduleFocus(getTarget) {
+  requestAnimationFrame(() => getTarget()?.focus?.({ preventScroll: true }));
+}
+
 function optionalInteger(value) {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+  if (value === undefined || value === null || value === "") return null;
+  const number = Number(value);
+  return Number.isInteger(number) ? number : null;
+}
+
+export function formatTrackDuration(durationMs) {
+  const seconds = Math.max(0, Math.floor((Number(durationMs) || 0) / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+export function formatCollectionDuration(durationMs) {
+  const seconds = Math.max(0, Math.floor((Number(durationMs) || 0) / 1000));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainder = seconds % 60;
+  if (hours) return `${hours} hr ${minutes} min`;
+  if (minutes) return `${minutes} min ${remainder} sec`;
+  return `${remainder} sec`;
 }

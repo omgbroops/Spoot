@@ -1,3 +1,4 @@
+import { SessionCache } from "../core/session-cache.js";
 import { normalizePlaybackItem } from "./playback-state.js";
 import { directPlaybackBlockReason } from "./playability.js";
 
@@ -40,18 +41,18 @@ export class SpotifyTrackService {
       throw new TypeError("SpotifyTrackService requires the Spotify track API method.");
     }
     this.apiClient = apiClient;
-    this.cache = new Map();
+    this.cache = new SessionCache({ maxEntries: 32 });
   }
 
   async loadTrack(trackId, { market, signal, force = false } = {}) {
-    if (!force && !signal && this.cache.has(trackId)) return this.cache.get(trackId);
+    if (!force && this.cache.has(trackId)) return this.cache.get(trackId);
     const payload = await this.apiClient.getTrack(trackId, { market, signal });
     const track = normalizeTrackDetail(payload);
     if (!track?.id || !track.uri) {
       throw new Error("Spotify returned an incomplete track.");
     }
     const result = { track };
-    if (!signal) this.cache.set(track.id, result);
+    this.cache.set(track.id, result);
     return result;
   }
 }

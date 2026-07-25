@@ -9,12 +9,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./src/styles/tokens.css">
-  <link rel="stylesheet" href="./src/styles/base.css">
-  <link rel="stylesheet" href="./src/styles/player.css">
-  <link rel="stylesheet" href="./src/styles/widgets.css">
-  <link rel="stylesheet" href="./src/styles/modals.css">
-  <link rel="stylesheet" href="./src/styles/immersive.css">
+  <link rel="stylesheet" href="./src/styles/tokens.css?v=20260725-hybrid2">
+  <link rel="stylesheet" href="./src/styles/base.css?v=20260725-hybrid2">
+  <link rel="stylesheet" href="./src/styles/player.css?v=20260725-hybrid2">
+  <link rel="stylesheet" href="./src/styles/widgets.css?v=20260725-hybrid2">
+  <link rel="stylesheet" href="./src/styles/modals.css?v=20260725-hybrid2">
+  <link rel="stylesheet" href="./src/styles/immersive.css?v=20260725-hybrid2">
 </head>
 <body>
   <div id="bg-wrap" aria-hidden="true">
@@ -80,7 +80,6 @@
     <section class="widget queue glass" id="w-queue" aria-label="Spotify queue">
       <div class="panel-head" id="queue-head" data-drag-handle>
         <span class="lbl">Up Next</span>
-        <button class="clr inactive-control" id="queue-clear" type="button" data-inactive-feature="Clearing the Spotify queue" data-nodrag>Clear</button>
       </div>
       <div class="list" id="queue-list" aria-live="polite">
         <div class="empty">Connect Spotify to see your queue.</div>
@@ -90,7 +89,7 @@
     <section class="widget lyrics glass hidden" id="w-lyrics" aria-label="Lyrics">
       <div class="panel-head" id="lyrics-head" data-drag-handle>
         <span class="lbl">Lyrics</span>
-        <button class="clr inactive-control" id="lyrics-edit" type="button" data-inactive-feature="Lyrics editing" data-nodrag>Edit</button>
+        <button class="clr" id="lyrics-edit" type="button" data-nodrag>Edit</button>
       </div>
       <div class="lyr-list" id="lyrics-list"><div class="lyr-empty">Connect Spotify to load lyrics.</div></div>
     </section>
@@ -127,7 +126,7 @@
         <input id="search-input" type="search" autocomplete="off" spellcheck="false" placeholder="Artists, songs, albums, playlists" aria-label="Search Spotify">
         <button class="search-close" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </form>
-      <div class="search-results" id="search-results" aria-live="polite"></div>
+      <div class="search-results" id="search-results"><div class="search-results-scroll" id="search-results-scroll" aria-live="polite"></div></div>
     </div>
   </section>
 
@@ -158,7 +157,7 @@
   <section class="modal glass" id="modal-library" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="lib-title">
     <div class="modal-head" data-drag-handle>
       <div class="modal-title" id="lib-title"><button class="library-back" id="library-back" type="button" aria-label="Back to Library" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m15 18-6-6 6-6"/></svg></button><span>Library</span></div>
-      <div class="head-btns"><button class="head-ic inactive-control" id="lib-new" type="button" title="Playlist editing is not connected in this pass" aria-label="Create playlist (unavailable)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg></button><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="head-btns"><button class="head-ic" id="library-refresh" type="button" title="Refresh Library" aria-label="Refresh Library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.2 6.2L4 11M20 13l-2.2 4.8A7 7 0 0 1 5.5 15"/></svg></button><button class="head-ic" id="lib-new" type="button" title="Create playlist" aria-label="Create playlist"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg></button><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     </div>
     <div class="modal-body library-body" id="library-content"><div class="empty">Open Library to load your Spotify collection.</div></div>
   </section>
@@ -224,8 +223,8 @@
   </section>
 
   <section class="modal glass" id="modal-import" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="import-title">
-    <div class="modal-head" data-drag-handle><div class="modal-title" id="import-title">Import</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
-    <div class="modal-body inactive-surface" data-inactive-feature="Music importing"><button class="btn primary btn-full" type="button" tabindex="-1">From this computer</button><button class="btn btn-full modal-button-gap" type="button" tabindex="-1">From Dropbox</button></div>
+    <div class="modal-head" data-drag-handle><div class="modal-title" id="import-title">Import local music</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body import-body"><p class="import-note">Audio stays in this browser and is stored in IndexedDB. Spotify audio is never downloaded.</p><button class="btn primary btn-full" id="import-computer" type="button">From this computer</button><button class="btn btn-full modal-button-gap" id="import-dropbox" type="button">From Dropbox</button><input id="local-file-input" type="file" accept="audio/*,.mp3,.m4a,.flac,.ogg,.wav,.aac,.opus" multiple hidden><div class="import-progress" id="import-progress" hidden></div></div>
   </section>
 
   <section class="modal glass" id="modal-stats" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="stats-title">
@@ -234,13 +233,39 @@
   </section>
 
   <section class="modal glass" id="modal-playlist" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="playlist-title">
-    <div class="modal-head" data-drag-handle><div class="modal-title" id="playlist-title">Add to playlist</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
-    <div class="modal-body"><div class="empty">Playlist editing is not connected in this pass.</div></div>
+    <div class="modal-head" data-drag-handle><div class="modal-title" id="playlist-title"><span id="playlist-picker-track">Add to playlist</span></div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body playlist-picker-body" id="playlist-picker-body"><label class="playlist-picker-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="playlist-picker-search" type="search" autocomplete="off" placeholder="Find a playlist" aria-label="Find a playlist"></label><button class="playlist-picker-new" id="playlist-picker-new" type="button"><span>＋</span> New playlist</button><div class="playlist-picker-status" id="playlist-picker-status" hidden></div><div class="playlist-picker-list" id="playlist-picker-list"></div></div>
+  </section>
+
+  <section class="modal glass playlist-editor-modal" id="modal-playlist-create" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="playlist-create-title">
+    <div class="modal-head" data-drag-handle><div class="modal-title" id="playlist-create-title">Create playlist</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <form class="modal-body playlist-editor-form" id="playlist-create-editor-form">
+      <button class="playlist-editor-cover" id="playlist-create-cover" type="button" aria-label="Choose playlist cover"><img alt="" hidden><span>Choose cover</span></button>
+      <div class="playlist-editor-fields"><input id="playlist-create-editor-name" type="text" maxlength="100" placeholder="Playlist name" required><textarea id="playlist-create-description" maxlength="300" placeholder="Add an optional description"></textarea></div>
+      <div class="playlist-editor-actions"><button class="btn playlist-privacy-toggle" id="playlist-create-privacy" type="button" aria-pressed="false">Make public</button><span></span><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" id="playlist-create-save" type="submit">Create</button></div>
+      <input id="playlist-create-cover-input" type="file" accept="image/*" hidden><div class="playlist-editor-status" id="playlist-create-status" hidden></div>
+    </form>
+  </section>
+
+  <section class="modal glass playlist-editor-modal" id="modal-playlist-edit" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="playlist-edit-title">
+    <div class="modal-head" data-drag-handle><div class="modal-title" id="playlist-edit-title">Edit playlist</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <form class="modal-body playlist-editor-form" id="playlist-edit-editor-form">
+      <button class="playlist-editor-cover" id="playlist-edit-cover" type="button" aria-label="Choose playlist cover"><img alt="" hidden><span>Change cover</span></button>
+      <div class="playlist-editor-fields"><input id="playlist-edit-name" type="text" maxlength="100" placeholder="Playlist name" required><textarea id="playlist-edit-description" maxlength="300" placeholder="Add an optional description"></textarea></div>
+      <div class="playlist-editor-actions"><button class="btn playlist-privacy-toggle" id="playlist-edit-privacy" type="button" aria-pressed="false">Make public</button><span></span><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" id="playlist-edit-save" type="submit">Save</button></div>
+      <input id="playlist-edit-cover-input" type="file" accept="image/*" hidden><div class="playlist-editor-status" id="playlist-edit-status" hidden></div>
+    </form>
+  </section>
+
+  <section class="modal glass" id="modal-dropbox" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="dropbox-title">
+    <div class="modal-head" data-drag-handle><div class="modal-title" id="dropbox-title">Dropbox</div><div class="head-btns"><button class="head-ic" id="dropbox-refresh" type="button" title="Refresh folder" aria-label="Refresh folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.2 6.2L4 11M20 13l-2.2 4.8A7 7 0 0 1 5.5 15"/></svg></button><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div></div>
+    <div class="modal-body dropbox-body" id="dropbox-content"><div class="empty">Connect Dropbox to browse audio files.</div></div>
   </section>
 
   <section class="modal glass" id="modal-lyrics" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="lyrics-title">
     <div class="modal-head" data-drag-handle><div class="modal-title" id="lyrics-title">Lyrics</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
-    <div class="modal-body"><div class="lyr-empty">Lyrics editing is not available.</div></div>
+    <div class="modal-body" id="lyrics-modal-body"></div>
+    <input id="lyrics-file-input" type="file" accept=".lrc,.txt,text/plain" hidden>
   </section>
 
   <section id="immersive" aria-label="Immersive player" aria-hidden="true">
@@ -280,6 +305,6 @@
 
   <div id="blank" aria-hidden="true"></div>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./src/js/app.js?v=20260724-command2"></script>
+  <script type="module" src="./src/js/app.js?v=20260725-hybrid2"></script>
 </body>
 </html>

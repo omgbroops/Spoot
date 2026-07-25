@@ -338,3 +338,77 @@ test("artist and track detail methods use current Spotify metadata endpoints", a
   assert.equal(requests[2].url.pathname, "/v1/tracks/Track123");
   assert.equal(requests[2].url.searchParams.get("market"), "US");
 });
+
+test("library mutations use generic URI-based Spotify endpoints", async () => {
+  const requests = [];
+  const client = new SpotifyApiClient({
+    tokenProvider: async () => "access",
+    fetchImpl: async (url, options) => {
+      requests.push({ url: new URL(url), options });
+      return options.method === "GET"
+        ? jsonResponse([true])
+        : new Response(null, { status: 204 });
+    },
+  });
+
+  await client.saveTracks(["Track123"]);
+  await client.removeSavedTracks(["Track123"]);
+  assert.deepEqual(await client.checkSavedTracks(["Track123"]), [true]);
+
+  assert.equal(requests[0].url.pathname, "/v1/me/library");
+  assert.equal(requests[0].options.method, "PUT");
+  assert.equal(requests[0].url.searchParams.get("uris"), "spotify:track:Track123");
+  assert.equal(requests[0].options.body, undefined);
+  assert.equal(requests[1].url.pathname, "/v1/me/library");
+  assert.equal(requests[1].options.method, "DELETE");
+  assert.equal(requests[2].url.pathname, "/v1/me/library/contains");
+  assert.equal(requests[2].options.method, "GET");
+});
+
+test("playlist editing methods use Spotify details, reorder, remove, and raw JPEG cover requests", async () => {
+  const requests = [];
+  const client = new SpotifyApiClient({
+    tokenProvider: async () => "access",
+    fetchImpl: async (url, options) => {
+      requests.push({ url: new URL(url), options });
+      if (options.method === "PUT" && url.endsWith("/items")) {
+        return jsonResponse({ snapshot_id: "snapshot-next" });
+      }
+      return new Response(null, { status: 204 });
+    },
+  });
+
+  await client.changePlaylistDetails("playlist1", {
+    name: "Night drive",
+    description: "after midnight",
+    public: false,
+  });
+  await client.reorderPlaylistItems("playlist1", {
+    rangeStart: 4,
+    insertBefore: 1,
+    snapshotId: "snapshot-old",
+  });
+  await client.removePlaylistItems("playlist1", ["spotify:track:track1"], {
+    positions: [3],
+    snapshotId: "snapshot-next",
+  });
+  await client.uploadPlaylistCover("playlist1", "data:image/jpeg;base64,abc123");
+
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    name: "Night drive",
+    description: "after midnight",
+    public: false,
+  });
+  assert.deepEqual(JSON.parse(requests[1].options.body), {
+    range_start: 4,
+    insert_before: 1,
+    range_length: 1,
+    snapshot_id: "snapshot-old",
+  });
+  assert.deepEqual(JSON.parse(requests[2].options.body), {
+    items: [{ uri: "spotify:track:track1", positions: [3] }],
+    snapshot_id: "snapshot-next",
+  });
+  assert.equal(requests[3].options.headers.get("Content-Type"), "image/jpeg");
+  assert.equal(requests[3].options.body, "abc123");
+});

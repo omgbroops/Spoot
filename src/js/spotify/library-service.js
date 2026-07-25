@@ -1,3 +1,4 @@
+import { SessionCache } from "../core/session-cache.js";
 import { SpotifyApiError } from "./api-client.js";
 import { normalizePlaybackItem } from "./playback-state.js";
 import { directPlaybackBlockReason } from "./playability.js";
@@ -105,7 +106,8 @@ export class SpotifyLibraryService {
     this.apiClient = apiClient;
     this.profile = null;
     this.sources = null;
-    this.sourceContents = new Map();
+    // Session-only, bounded LRU cache. Only opened collections are retained.
+    this.sourceContents = new SessionCache({ maxEntries: 3 });
   }
 
   async loadSources({ signal, force = false } = {}) {
@@ -150,6 +152,7 @@ export class SpotifyLibraryService {
 
   async loadSource(source, { signal, force = false, onProgress } = {}) {
     const cacheKey = source?.id;
+    if (force && cacheKey) this.sourceContents.delete(cacheKey);
     if (!force && cacheKey && this.sourceContents.has(cacheKey)) {
       const cached = this.sourceContents.get(cacheKey);
       onProgress?.(cached);
@@ -169,7 +172,7 @@ export class SpotifyLibraryService {
       offset = page.nextOffset;
       const progress = {
         source,
-        items: [...items],
+        items,
         total,
         durationMs: collectionDuration(items),
         nextOffset: offset,
@@ -193,6 +196,32 @@ export class SpotifyLibraryService {
     source.durationMs = result.durationMs;
     if (cacheKey) this.sourceContents.set(cacheKey, result);
     return result;
+  }
+
+  invalidateSource(sourceId) {
+    if (sourceId) this.sourceContents.delete(sourceId);
+  }
+  getCachedSource(sourceId) {
+    return sourceId ? this.sourceContents.get(sourceId) : undefined;
+  }
+
+  addSource(source, { afterLiked = true } = {}) {
+    if (!source?.id) return;
+    const current = Array.isArray(this.sources) ? this.sources.filter((entry) => entry.id !== source.id) : [];
+    const index = afterLiked && current[0]?.kind === "liked" ? 1 : 0;
+    current.splice(index, 0, source);
+    this.sources = current;
+  }
+
+  updateSource(sourceId, patch = {}) {
+    const source = this.sources?.find((entry) => entry.id === sourceId);
+    if (source) Object.assign(source, patch);
+    return source || null;
+  }
+
+  clearSessionCache() {
+    this.sources = null;
+    this.sourceContents.clear();
   }
 
   async loadSourcePage(source, { offset = 0, signal } = {}) {

@@ -15,17 +15,22 @@ import {
   AUDIO_EQ_PRESETS,
   createAudioEffectsController,
 } from "./audio/audio-effects.js";
-import { SpotifyApiClient, SpotifyApiError } from "./spotify/api-client.js?v=20260724-command2";
+import { SpotifyApiClient, SpotifyApiError } from "./spotify/api-client.js?v=20260725-hybrid2";
 import { SpotifyPlaybackSdk } from "./spotify/playback-sdk.js";
-import { PlaybackController } from "./spotify/playback-controller.js?v=20260724-command2";
+import { PlaybackController } from "./spotify/playback-controller.js?v=20260725-hybrid2";
 import { SpotifyQueueService } from "./spotify/queue-service.js";
-import { SpotifyLibraryService } from "./spotify/library-service.js";
-import { SpotifySearchService } from "./spotify/search-service.js?v=20260724-command2";
-import { SpotifyAlbumService } from "./spotify/album-service.js?v=20260724-command2";
-import { SpotifyArtistService } from "./spotify/artist-service.js?v=20260724-command2";
-import { SpotifyTrackService } from "./spotify/track-service.js?v=20260724-command2";
-import { SpotifyPlaylistService } from "./spotify/playlist-service.js?v=20260724-command2";
-import { LyricsService } from "./lyrics/lyrics-service.js";
+import { SpotifyLibraryService } from "./spotify/library-service.js?v=20260725-hybrid2";
+import { SpotifySearchService } from "./spotify/search-service.js?v=20260725-hybrid2";
+import { SpotifyAlbumService } from "./spotify/album-service.js?v=20260725-hybrid2";
+import { SpotifyArtistService } from "./spotify/artist-service.js?v=20260725-hybrid2";
+import { SpotifyTrackService } from "./spotify/track-service.js?v=20260725-hybrid2";
+import { SpotifyPlaylistService } from "./spotify/playlist-service.js?v=20260725-hybrid2";
+import { SpotifyPlaylistPickerService } from "./spotify/playlist-picker-service.js?v=20260725-hybrid2";
+import { LocalLibraryService, localSource } from "./local/local-library.js?v=20260725-hybrid2";
+import { HybridPlaylistService, isLocalEntry } from "./local/hybrid-playlist-service.js?v=20260725-hybrid2";
+import { LocalPlaybackController, localIdFromUri } from "./local/local-playback-controller.js?v=20260725-hybrid2";
+import { DropboxImportService } from "./local/dropbox-service.js?v=20260725-hybrid2";
+import { LyricsService, lyricsToText } from "./lyrics/lyrics-service.js?v=20260725-hybrid2";
 import { MockPlaybackController } from "./mock/mock-playback-controller.js?v=20260724-command2";
 import { MockLibraryService } from "./mock/mock-library-service.js";
 import { MockSearchService } from "./mock/mock-search-service.js?v=20260724-command2";
@@ -41,12 +46,12 @@ import {
   renderProgress,
   setPlaybackControlsEnabled,
 } from "./ui/now-playing.js";
-import { renderQueue, renderQueueUnavailable, setupQueue } from "./ui/queue.js";
+import { renderQueue, renderQueueUnavailable, setupQueue } from "./ui/queue.js?v=20260725-hybrid2";
 import {
   renderLibraryDetail,
   renderLibrarySources,
   setupLibrary,
-} from "./ui/library.js?v=20260724-command2";
+} from "./ui/library.js?v=20260725-hybrid2";
 import {
   animateSearchContent,
   focusSearch,
@@ -54,11 +59,24 @@ import {
   renderSearch,
   setSearchChrome,
   setupSearch,
-} from "./ui/search.js?v=20260724-command2";
-import { renderAlbum, setupAlbum } from "./ui/album.js?v=20260724-command2";
-import { renderArtist, setupArtist } from "./ui/artist.js?v=20260724-command2";
-import { renderTrack, setupTrack } from "./ui/track.js?v=20260724-command2";
-import { renderPlaylist } from "./ui/playlist.js?v=20260724-command2";
+} from "./ui/search.js?v=20260725-hybrid2";
+import { renderAlbum, setupAlbum } from "./ui/album.js?v=20260725-hybrid2";
+import { renderArtist, setupArtist } from "./ui/artist.js?v=20260725-hybrid2";
+import { renderTrack, setupTrack } from "./ui/track.js?v=20260725-hybrid2";
+import { renderPlaylist, setupPlaylistInteractions } from "./ui/playlist.js?v=20260725-hybrid2";
+import {
+  addPlaylistPickerSource,
+  focusPlaylistPicker,
+  renderPlaylistPicker,
+  resetPlaylistCreateForm,
+  setPlaylistPickerBusy,
+  setupPlaylistPicker,
+  updatePlaylistPickerMembership,
+} from "./ui/playlist-picker.js?v=20260725-hybrid2";
+import { setupPlaylistEditor, prepareCreatePlaylist, prepareEditPlaylist, setPlaylistEditorBusy } from "./ui/playlist-editor.js?v=20260725-hybrid2";
+import { preparePlaylistCover } from "./spotify/playlist-image.js?v=20260725-hybrid2";
+import { setupLyricsEditor, showLyricsEditor, showLyricsResults, deliverLyricsText, updateLyricsSyncPlayback, handleLyricsSyncKey } from "./ui/lyrics-editor.js?v=20260725-hybrid2";
+import { renderDropbox, setupDropbox } from "./ui/dropbox.js?v=20260725-hybrid2";
 import { renderLyrics, setupLyrics, updateLyricsPosition } from "./ui/lyrics.js";
 import { renderDevicePicker, setupDevicePicker } from "./ui/device-picker.js";
 import {
@@ -123,7 +141,29 @@ const MOCK_SCENARIOS = new Set([
 
 let config;
 let auth;
-let controller;
+let controller; // Spotify playback controller
+let localController;
+let localLibrary;
+let hybridService;
+let dropboxService;
+let playlistPickerService;
+let playbackMode = "spotify";
+let spotifyPlayback = null;
+let spotifyQueue = null;
+let spotifyVolume = 1;
+let localTracks = [];
+let playlistPickerTrack = null;
+let playlistPickerCreateOnly = false;
+let playlistPickerSources = [];
+let playlistPickerMemberships = new Map();
+let playlistCreateTrack = null;
+let playlistEditTarget = null;
+let hybridSession = null;
+let hybridTransitioning = false;
+let hybridBoundaryTimer = null;
+let currentLyrics = null;
+let lyricsImportTarget = "editor";
+let dropboxBrowseMode = "audio";
 let libraryService;
 let searchService;
 let albumService;
@@ -142,6 +182,7 @@ let selectedLibraryItems = [];
 let selectedLibraryNextOffset = null;
 let selectedLibraryDurationMs = null;
 let controllerUnsubscribers = [];
+let localControllerUnsubscribers = [];
 let queueVisible = true;
 let dockVisible = true;
 let lyricsVisible = false;
@@ -219,6 +260,7 @@ await initialize().catch((error) => {
 
 async function initialize() {
   setupUi();
+  await initializeLocalFeatures();
   removeLegacyOAuthQuery();
   config = await loadConfig();
 
@@ -295,7 +337,8 @@ function setupUi() {
   setupWidgets();
   setupImmersive();
   setupLyrics({
-    onSeek: (positionMs) => runMediaCommand(() => controller?.seek(positionMs)),
+    onSeek: (positionMs) => runMediaCommand(() => activeController()?.seek(positionMs)),
+    onEdit: openLyricsEditorModal,
   });
   setupConnectionStatus({
     onPrimary: handlePrimaryAction,
@@ -329,7 +372,7 @@ function setupUi() {
   setPlaybackControlsEnabled(false, "Connect the Spool player first");
 
   bindPlaybackButtons();
-  setupQueue({ onPlay: playQueueItem });
+  setupQueue({ onPlay: playQueueItem, onAddToPlaylist: openPlaylistPicker });
   setupDevicePicker({
     onOpen: refreshDevices,
     onSelect: transferToDevice,
@@ -338,16 +381,22 @@ function setupUi() {
     onSelectSource: openLibrarySource,
     onPlay: playTrackNow,
     onPlaySource: playTrackNow,
+    onAddToPlaylist: openPlaylistPicker,
     onOpenAlbum: (selection) => openCatalogFromLibrary("album", selection),
     onOpenArtist: (selection) => openCatalogFromLibrary("artist", selection),
     onBack: showLibrarySources,
     onLoadMore: loadMoreLibraryItems,
-    onRefresh: () => refreshLibrary({ force: true }),
+    onRefresh: refreshCurrentLibraryView,
+    onEditPlaylist: openEditPlaylistModal,
+    onRemovePlaylistItem: removeLibraryPlaylistItem,
+    onReorderPlaylistItem: reorderLibraryPlaylistItem,
+    onDeleteLocal: deleteLocalTrack,
   });
   // The original standalone detail modals remain functional for compatibility,
   // but normal navigation now renders every catalog page beneath Search.
   setupAlbum({
     onPlay: playTrackNow,
+    onAddToPlaylist: openPlaylistPicker,
     onOpenArtist: (selection) => navigateCatalog("artist", selection),
     onBack: returnFromAlbum,
   });
@@ -358,6 +407,7 @@ function setupUi() {
   });
   setupTrack({
     onPlay: playTrackNow,
+    onAddToPlaylist: openPlaylistPicker,
     onOpenAlbum: (selection) => navigateCatalog("album", selection),
     onOpenArtist: (selection) => navigateCatalog("artist", selection),
     onBack: navigateCatalogBack,
@@ -369,15 +419,56 @@ function setupUi() {
     onOpenArtist: (selection) => navigateCatalog("artist", selection),
     onOpenTrack: (selection) => navigateCatalog("track", selection),
     onOpenPlaylist: (selection) => navigateCatalog("playlist", selection),
+    onAddToPlaylist: openPlaylistPicker,
+    onRefresh: refreshCatalogCurrent,
     onBack: navigateCatalogBack,
   });
   setupCommandPalette({ onCommand: executeCommand });
+  setupPlaylistPicker({
+    onToggle: togglePlaylistPickerMembership,
+    onCheck: checkPlaylistPickerMembership,
+    onNew: openCreatePlaylistModal,
+  });
+  setupPlaylistEditor({
+    onCreate: createPlaylistFromEditor,
+    onUpdate: updatePlaylistFromEditor,
+  });
+  setupPlaylistInteractions({
+    onEdit: openEditPlaylistModal,
+    onRemove: removeCatalogPlaylistItem,
+    onReorder: reorderCatalogPlaylistItem,
+  });
+  setupLyricsEditor({
+    onSave: saveEditedLyrics,
+    onSearch: searchLyricsForEditor,
+    onDropbox: openLyricsDropbox,
+    onComputer: openLyricsComputer,
+    onTogglePlay: () => runMediaCommand(togglePlayback),
+    onSeek: (positionMs) => runMediaCommand(() => activeController()?.seek(positionMs)),
+    onSpeed: (speed) => setPlaybackSpeed(speed),
+    getPlayback: () => ({ ...(currentPlayback || {}), speed: soundSettings.speed }),
+  });
+  document.getElementById("lyrics-file-input")?.addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try { deliverImportedLyrics(await file.text()); }
+    catch (error) { showToast(humanizeError(error)); }
+  });
+  setupDropbox({
+    onConnect: connectDropbox,
+    onFinish: finishDropboxConnection,
+    onDisconnect: disconnectDropbox,
+    onBrowse: browseDropbox,
+    onRefresh: browseDropbox,
+    onImport: importDropboxFile,
+  });
   setupMediaSession({
-    onPlay: () => currentPlayback?.paused && runMediaCommand(() => controller?.togglePlay()),
-    onPause: () => currentPlayback?.isPlaying && runMediaCommand(() => controller?.togglePlay()),
-    onSeek: (position) => runMediaCommand(() => controller?.seek(position * 1000)),
-    onPrevious: () => runMediaCommand(() => controller?.previous()),
-    onNext: () => runMediaCommand(() => controller?.next()),
+    onPlay: () => currentPlayback?.paused && runMediaCommand(togglePlayback),
+    onPause: () => currentPlayback?.isPlaying && runMediaCommand(togglePlayback),
+    onSeek: (position) => runMediaCommand(() => activeController()?.seek(position * 1000)),
+    onPrevious: () => runMediaCommand(previousPlayback),
+    onNext: () => runMediaCommand(nextPlayback),
   });
   bindVolume();
   bindSoundSettings();
@@ -385,6 +476,8 @@ function setupUi() {
   bindSeekSurface(getElements().seek);
   bindSeekSurface(getElements().immersiveSeek);
   bindDock();
+  bindLocalImport();
+  bindLibraryCreate();
   bindKeyboard();
   renderSoundSettings();
   updateAmbientLoop();
@@ -406,7 +499,9 @@ function setupUi() {
       focusSearch();
     }
     if (detail?.id === "modal-settings") refreshDevices();
-    if (detail?.id === "modal-eq") controller?.refreshVolume?.().catch(() => {});
+    if (detail?.id === "modal-eq") activeController()?.refreshVolume?.().catch(() => {});
+    if (detail?.id === "modal-playlist") focusPlaylistPicker();
+    if (detail?.id === "modal-dropbox") renderDropbox({ connected: Boolean(dropboxService?.connected) });
   });
   document.addEventListener("spool:modal-close", ({ detail }) => {
     if (detail?.id === "modal-library" && cancelLibraryRequest()) {
@@ -428,6 +523,108 @@ function setupUi() {
       trackAbortController = undefined;
     }
   });
+}
+
+
+async function initializeLocalFeatures() {
+  try {
+    localLibrary = new LocalLibraryService();
+    await localLibrary.open();
+    hybridService = new HybridPlaylistService({ localLibrary });
+    await hybridService.open();
+    localTracks = await localLibrary.listTracks({ coverLimit: 32 });
+    dropboxService = new DropboxImportService();
+    if (!lyricsService || lyricsService instanceof MockLyricsService) {
+      lyricsService = new LyricsService({
+        onDiagnostic: (diagnostic) => console.debug("Lyrics provider skipped.", diagnostic),
+      });
+    }
+    localController = new LocalPlaybackController({
+      libraryService: localLibrary,
+      onBeforePlay: async () => {
+        if (spotifyPlayback?.isPlaying && controller?.togglePlay) {
+          await controller.togglePlay().catch(() => {});
+        }
+      },
+    });
+    bindLocalController(localController);
+    await localController.connect();
+  } catch (error) {
+    console.warn("Local Files could not initialize.", safeDiagnostic(error, "local-library"));
+    showToast("Local Files could not initialize in this browser.");
+  }
+}
+
+function bindLocalController(nextController) {
+  localControllerUnsubscribers.forEach((unsubscribe) => unsubscribe());
+  localControllerUnsubscribers = [
+    nextController.on("state", (playback) => {
+      if (playbackMode !== "local") return;
+      currentPlayback = playback;
+      renderPlayback(playback);
+      syncLyrics(playback);
+      updateLyricsPosition(playback?.positionMs || 0, { instant: true });
+      currentVolume = nextController.volume;
+      renderVolume();
+    }),
+    nextController.on("progress", (positionMs) => {
+      if (playbackMode !== "local" || !currentPlayback) return;
+      currentPlayback = { ...currentPlayback, positionMs };
+      renderProgress(positionMs, currentPlayback.durationMs);
+      renderImmersive({ ...currentPlayback, positionMs });
+      updateLyricsPosition(positionMs);
+      updateLyricsSyncPlayback();
+      updateMediaSessionPosition(positionMs, currentPlayback.durationMs);
+      maybeEnterHybridLocal(positionMs);
+    }),
+    nextController.on("queue", (queue) => {
+      if (playbackMode !== "local") return;
+      currentQueue = queue;
+      if (hybridSession) renderHybridQueue();
+      else renderQueue(queue);
+    }),
+    nextController.on("volume", (volume) => {
+      if (playbackMode !== "local") return;
+      currentVolume = volume;
+      renderVolume();
+    }),
+    nextController.on("ended", () => {
+      if (hybridSession) playHybridIndex(hybridSession.index + 1, { fromEnded: true }).catch((error) => showToast(humanizeError(error)));
+    }),
+    nextController.on("notice", ({ message }) => showToast(message)),
+    nextController.on("error", ({ message, error, operation }) => {
+      console.warn("Local playback failed.", safeDiagnostic(error || new Error(message), operation || "local-playback"));
+      showToast(message || "Local playback failed.");
+    }),
+  ];
+}
+
+function activeController() {
+  return playbackMode === "local" ? localController : controller;
+}
+
+async function activateSpotifyPlayback() {
+  if (playbackMode === "local") await localController?.pause?.().catch(() => {});
+  playbackMode = "spotify";
+  currentPlayback = spotifyPlayback;
+  currentQueue = spotifyQueue;
+  currentVolume = spotifyVolume;
+  if (currentPlayback) renderPlayback(currentPlayback);
+  if (hybridSession) renderHybridQueue();
+  else if (currentQueue) renderQueue(currentQueue);
+  renderVolume();
+}
+
+async function activateLocalPlayback() {
+  playbackMode = "local";
+  await localController?.setSpeed?.(soundSettings.speed);
+  currentPlayback = localController?.playbackState || null;
+  currentQueue = localController?.queue || null;
+  currentVolume = localController?.volume ?? 1;
+  if (currentPlayback) renderPlayback(currentPlayback);
+  if (hybridSession) renderHybridQueue();
+  else if (currentQueue) renderQueue(currentQueue);
+  renderVolume();
 }
 
 async function initializeMockMode() {
@@ -484,10 +681,13 @@ function createLiveController() {
   albumService = new SpotifyAlbumService({ apiClient });
   artistService = new SpotifyArtistService({ apiClient });
   trackService = new SpotifyTrackService({ apiClient });
-  playlistService = new SpotifyPlaylistService({ apiClient });
-  lyricsService = new LyricsService({
-    onDiagnostic: (diagnostic) => console.debug("Lyrics provider skipped.", diagnostic),
-  });
+  playlistService = new SpotifyPlaylistService({ apiClient, profileProvider: () => libraryService?.profile });
+  playlistPickerService = new SpotifyPlaylistPickerService({ apiClient, libraryService, hybridService });
+  if (!lyricsService || lyricsService instanceof MockLyricsService) {
+    lyricsService = new LyricsService({
+      onDiagnostic: (diagnostic) => console.debug("Lyrics provider skipped.", diagnostic),
+    });
+  }
   controller = new PlaybackController({ apiClient, sdk, queueService });
   bindController(controller);
 }
@@ -497,30 +697,49 @@ function bindController(nextController) {
   controllerUnsubscribers = [
     nextController.on("connection", (status) => {
       connectionState = status.state;
-      if (["active", "player-ready"].includes(status.state)) {
-        renderSteadyConnection(status);
-      } else {
-        renderConnection(status.state, status);
-      }
+      if (["active", "player-ready"].includes(status.state)) renderSteadyConnection(status);
+      else renderConnection(status.state, status);
       renderSettings(status);
     }),
     nextController.on("state", (playback) => {
+      spotifyPlayback = playback;
+      if (playbackMode === "local" && playback?.isPlaying) {
+        localController?.pause?.().catch(() => {});
+        playbackMode = "spotify";
+      }
+      if (playbackMode !== "spotify") {
+        renderSteadyConnection();
+        renderSettings();
+        return;
+      }
       currentPlayback = playback;
+      syncHybridSpotifyIndex(playback);
       renderPlayback(playback);
       syncLyrics(playback);
       updateLyricsPosition(playback?.positionMs || 0, { instant: true });
+      updateLyricsSyncPlayback();
+      if (hybridSession) renderHybridQueue();
       renderSteadyConnection();
       renderSettings();
     }),
     nextController.on("progress", (positionMs) => {
-      if (!currentPlayback) return;
+      if (playbackMode !== "spotify" || !currentPlayback) return;
       currentPlayback = { ...currentPlayback, positionMs };
+      spotifyPlayback = { ...spotifyPlayback, positionMs };
       renderProgress(positionMs, currentPlayback.durationMs);
       renderImmersive({ ...currentPlayback, positionMs });
       updateLyricsPosition(positionMs);
+      updateLyricsSyncPlayback();
       updateMediaSessionPosition(positionMs, currentPlayback.durationMs);
+      maybeEnterHybridLocal(positionMs);
     }),
     nextController.on("queue", (queue) => {
+      spotifyQueue = queue;
+      if (playbackMode !== "spotify") return;
+      if (hybridSession) {
+        renderHybridQueue();
+        return;
+      }
       currentQueue = queue;
       renderQueue(queue);
     }),
@@ -529,32 +748,27 @@ function bindController(nextController) {
       renderSettings();
     }),
     nextController.on("volume", (volume) => {
+      spotifyVolume = volume;
+      if (playbackMode !== "spotify") return;
       currentVolume = volume;
       renderVolume();
     }),
+    nextController.on("ended", () => {
+      if (hybridSession) playHybridIndex(hybridSession.index + 1, { fromEnded: true }).catch((error) => showToast(humanizeError(error)));
+    }),
     nextController.on("notice", ({ message }) => showToast(message)),
     nextController.on("null-state", ({ message }) => {
+      if (playbackMode !== "spotify") return;
       showToast(message);
       renderNowPlaying({ emptyMessage: "No active Spotify playback" });
       renderImmersive({ emptyMessage: "No active Spotify playback" });
       resetLyrics("empty");
     }),
     nextController.on("error", ({ message, error, operation, type }) => {
-      const diagnosticError = error || {
-        name: "SpotifySdkError",
-        code: type,
-        message,
-      };
-      console.warn(
-        "Spotify operation failed.",
-        safeDiagnostic(diagnosticError, operation || type),
-      );
-      if (operation !== "refresh-devices") {
-        showToast(message || humanizeError(error));
-      }
-      if (operation === "refresh-queue") {
-        renderQueueUnavailable(message);
-      }
+      const diagnosticError = error || { name: "SpotifySdkError", code: type, message };
+      console.warn("Spotify operation failed.", safeDiagnostic(diagnosticError, operation || type));
+      if (operation !== "refresh-devices") showToast(message || humanizeError(error));
+      if (operation === "refresh-queue" && playbackMode === "spotify") renderQueueUnavailable(message);
     }),
   ];
 }
@@ -595,13 +809,13 @@ function renderConnection(state, overrides = {}) {
 
 function renderSteadyConnection(status = {}) {
   if (!(config?.mock || auth?.hasSession())) return;
-  if (currentPlayback?.activeDevice && controller?.deviceId) {
+  if (spotifyPlayback?.activeDevice && controller?.deviceId) {
     renderConnection("active", { hidden: true });
     return;
   }
 
-  const externalDevice = currentPlayback?.device?.isActive
-    ? currentPlayback.device
+  const externalDevice = spotifyPlayback?.device?.isActive
+    ? spotifyPlayback.device
     : null;
   if (externalDevice && externalDevice.id !== controller?.deviceId) {
     const name = externalDevice.name?.trim();
@@ -627,10 +841,13 @@ function renderSteadyConnection(status = {}) {
 }
 
 function renderLoggedOut() {
-  currentPlayback = null;
-  currentQueue = null;
+  spotifyPlayback = null;
+  spotifyQueue = null;
   currentDevices = [];
-  librarySources = [];
+  libraryService?.clearSessionCache?.();
+  playlistPickerService?.clear?.();
+  playlistPickerService = undefined;
+  librarySources = localLibrary ? [localSource(localTracks)] : [];
   selectedLibrarySource = null;
   selectedLibraryItems = [];
   selectedLibraryNextOffset = null;
@@ -645,18 +862,22 @@ function renderLoggedOut() {
   artistAbortController = undefined;
   trackAbortController = undefined;
   albumReturnModal = "modal-search";
-  resetLyrics("disconnected");
   renderSearch();
   renderAlbum();
   renderArtist();
   renderTrack();
   setHiddenMode(false);
   renderConnection("logged-out");
-  renderNowPlaying({ emptyMessage: "Log in to Spotify to start" });
-  renderImmersive({ emptyMessage: "Log in to Spotify to start" });
-  renderQueue({ status: "disconnected" });
-  renderMediaSession(null);
-  setPlaybackControlsEnabled(false, "Log in to Spotify first");
+  if (playbackMode !== "local") {
+    currentPlayback = null;
+    currentQueue = null;
+    resetLyrics("disconnected");
+    renderNowPlaying({ emptyMessage: "Log in to Spotify or open Local Files" });
+    renderImmersive({ emptyMessage: "Log in to Spotify or open Local Files" });
+    renderQueue({ status: "disconnected", message: "Open Local Files or log in to Spotify." });
+    renderMediaSession(null);
+    setPlaybackControlsEnabled(false, "Choose a local song or log in to Spotify");
+  }
   renderSettings();
 }
 
@@ -668,16 +889,16 @@ function renderSettings(status = {}) {
     transferring: connectionState === "transferring-playback",
     accountText: config?.mock ? "Mock session" : loggedIn ? "Spotify connected" : "Not connected",
     deviceText: controller?.deviceId
-      ? currentPlayback?.activeDevice
+      ? spotifyPlayback?.activeDevice
         ? "Spool is the active device"
-        : currentPlayback?.device?.isActive
-          ? `Listening on ${currentPlayback.device.name || "another device"}`
+        : spotifyPlayback?.device?.isActive
+          ? `Listening on ${spotifyPlayback.device.name || "another device"}`
           : "Spool device ready"
       : status.message || "Spool device unavailable",
     transfer: {
       label: "Listen here",
       onClick: transferHere,
-      hidden: !loggedIn || !controller?.deviceId || Boolean(currentPlayback?.activeDevice),
+      hidden: !loggedIn || !controller?.deviceId || Boolean(spotifyPlayback?.activeDevice),
       disabled: connectionState === "transferring-playback",
     },
     onConnect: login,
@@ -686,8 +907,8 @@ function renderSettings(status = {}) {
   });
   renderDevicePicker({
     devices: currentDevices,
-    activeDeviceId: currentPlayback?.device?.isActive ? currentPlayback.device.id : null,
-    activeDeviceName: currentPlayback?.device?.isActive ? currentPlayback.device.name : null,
+    activeDeviceId: spotifyPlayback?.device?.isActive ? spotifyPlayback.device.id : null,
+    activeDeviceName: spotifyPlayback?.device?.isActive ? spotifyPlayback.device.name : null,
     spoolDeviceId: controller?.deviceId ?? null,
     loading: connectionState === "loading-sdk" || connectionState === "connecting-player",
     loggedIn,
@@ -954,7 +1175,6 @@ async function logout() {
   artistService = undefined;
   trackService = undefined;
   playlistService = undefined;
-  lyricsService = undefined;
   auth?.logout();
   renderLoggedOut();
   showToast("Spotify disconnected.");
@@ -981,29 +1201,58 @@ async function transferToDevice(deviceId) {
 }
 
 async function playTrackNow(selection) {
+  const request = typeof selection === "string" ? { uri: selection } : selection || {};
+  if (request.hybridPlaylistId && Number.isInteger(request.hybridPosition)) {
+    return startHybridPlayback(request.hybridPlaylistId, request.hybridPosition);
+  }
+
+  const localId = request.localId || localIdFromUri(request.uri);
+  if (request.localSourceId) {
+    if (!localTracks.length) {
+      showToast("Import songs into Local Files first.");
+      return;
+    }
+    return playTrackNow({ localId: localTracks[0].id, uri: localTracks[0].uri });
+  }
+  if (localId) {
+    hybridSession = null;
+    if (!localController) {
+      showToast("Local Files is unavailable in this browser.");
+      return;
+    }
+    try {
+      await activateLocalPlayback();
+      const contextIds = selectedLibrarySource?.kind === "local"
+        ? selectedLibraryItems.map((item) => item.localId || item.id).filter(Boolean)
+        : localTracks.map((track) => track.id);
+      await localController.playTrack(localId, { contextIds, autoAdvance: true });
+      return;
+    } catch (error) {
+      showToast(humanizeError(error));
+      return;
+    }
+  }
+
   if (!controller?.playNow) {
-    showToast("Wait for the Spool browser player to connect.");
+    showToast("Log in and wait for the Spool browser player to connect.");
     return;
   }
-  const request = typeof selection === "string" ? { uri: selection } : selection || {};
+  hybridSession = null;
   try {
+    await activateSpotifyPlayback();
     if (request.contextOnly && request.contextUri) {
       await controller.playNow(null, { contextUri: request.contextUri });
     } else if (request.sourceKind === "liked") {
       const playableUris = selectedLibraryItems
-        .filter((entry) => entry.playable && entry.uri)
+        .filter((entry) => !isLocalEntry(entry) && entry.playable && entry.uri)
         .map((entry) => entry.uri);
       const selectedIndex = playableUris.indexOf(request.uri);
-      const orderedUris = selectedIndex < 0
-        ? [request.uri]
-        : playableUris.slice(selectedIndex);
+      const orderedUris = selectedIndex < 0 ? [request.uri] : playableUris.slice(selectedIndex);
       await controller.playNow(request.uri, { uris: orderedUris });
     } else {
       await controller.playNow(request.uri, {
         contextUri: request.contextUri,
-        contextPosition: Number.isInteger(request.contextPosition)
-          ? request.contextPosition
-          : null,
+        contextPosition: Number.isInteger(request.contextPosition) ? request.contextPosition : null,
       });
     }
     renderSteadyConnection();
@@ -1012,9 +1261,257 @@ async function playTrackNow(selection) {
   }
 }
 
-async function searchSpotify(query) {
+
+
+async function startHybridPlayback(playlistId, requestedIndex = 0) {
+  const collection = await resolveHybridCollection(playlistId);
+  if (!collection?.items?.length) {
+    showToast("That playlist has no playable songs.");
+    return;
+  }
+  const items = collection.items.filter((entry) => entry?.uri && entry?.playable !== false);
+  const position = Math.max(0, Math.min(items.length - 1, Number(requestedIndex) || 0));
+  if (!items.some(isLocalEntry)) {
+    const selected = items[position];
+    return playTrackNow({
+      uri: selected.uri,
+      contextUri: collection.contextUri,
+      contextPosition: Number.isInteger(selected.spotifyPosition) ? selected.spotifyPosition : null,
+      sourceKind: collection.kind,
+    });
+  }
+
+  clearTimeout(hybridBoundaryTimer);
+  hybridBoundaryTimer = null;
+  hybridSession = {
+    playlistId: String(playlistId),
+    contextUri: collection.contextUri || null,
+    kind: collection.kind || "playlist",
+    items,
+    index: position,
+    enteredLocal: false,
+    lastSpotifyIndex: findPreviousSpotifyIndex(items, position),
+    resumeSpotify: spotifyPlayback?.currentItem
+      ? {
+          itemUri: spotifyPlayback.itemUri || spotifyPlayback.currentItem.uri || null,
+          contextUri: spotifyPlayback.context?.uri || null,
+          positionMs: Number(spotifyPlayback.positionMs) || 0,
+          wasPlaying: Boolean(spotifyPlayback.isPlaying),
+        }
+      : null,
+  };
+  return playHybridIndex(position);
+}
+
+async function resolveHybridCollection(playlistId) {
+  const id = String(playlistId || "");
+  if (catalogCurrent?.kind === "playlist" && catalogCurrent.result?.playlist?.id === id) {
+    return {
+      kind: "playlist",
+      contextUri: catalogCurrent.result.playlist.uri,
+      items: catalogCurrent.result.items || [],
+    };
+  }
+  if (selectedLibrarySource?.id === id) {
+    return {
+      kind: selectedLibrarySource.kind,
+      contextUri: selectedLibrarySource.uri,
+      items: selectedLibraryItems || [],
+    };
+  }
+  if (id === "local-files") {
+    return {
+      kind: "local",
+      contextUri: null,
+      items: localTracks.map(normalizeLocalLibraryEntry),
+    };
+  }
+
+  const source = librarySources.find((candidate) => candidate.id === id);
+  if (!source || !libraryService) return null;
+  const page = await libraryService.loadSource(source, { force: false });
+  const spotifyItems = page.items || [];
+  const items = hybridService && ["liked", "playlist"].includes(source.kind)
+    ? await hybridService.mergeCollection(source.id, spotifyItems)
+    : spotifyItems;
+  return { kind: source.kind, contextUri: source.uri || null, items };
+}
+
+async function playHybridIndex(index, { fromEnded = false } = {}) {
+  clearTimeout(hybridBoundaryTimer);
+  hybridBoundaryTimer = null;
+  if (!hybridSession || hybridTransitioning) return;
+  if (index < 0) index = 0;
+  if (index >= hybridSession.items.length) return finishHybridPlayback();
+  const item = hybridSession.items[index];
+  if (!item?.uri) return playHybridIndex(index + 1, { fromEnded });
+  hybridTransitioning = true;
+  hybridSession.index = index;
+  try {
+    if (isLocalEntry(item)) {
+      hybridSession.enteredLocal = true;
+      const localId = item.localId || localIdFromUri(item.uri);
+      if (!localId || !localController) throw new Error("That local song is unavailable.");
+      await activateLocalPlayback();
+      await localController.playTrack(localId, { contextIds: [localId], autoAdvance: false });
+    } else {
+      hybridSession.lastSpotifyIndex = index;
+      await activateSpotifyPlayback();
+      const contextPosition = Number.isInteger(item.spotifyPosition)
+        ? item.spotifyPosition
+        : countSpotifyBefore(hybridSession.items, index);
+      await controller.playNow(item.uri, {
+        contextUri: hybridSession.contextUri,
+        contextPosition,
+      });
+    }
+    renderHybridQueue();
+  } finally {
+    hybridTransitioning = false;
+  }
+}
+
+function syncHybridSpotifyIndex(playback) {
+  if (!hybridSession || playbackMode !== "spotify" || hybridTransitioning) return;
+  const uri = playback?.itemUri || playback?.currentItem?.uri || playback?.item?.uri;
+  if (!uri) return;
+  const nearby = hybridSession.items.findIndex((item, index) => (
+    !isLocalEntry(item) &&
+    item.uri === uri &&
+    index >= Math.max(0, hybridSession.index - 1)
+  ));
+  if (nearby >= 0) {
+    if (nearby !== hybridSession.index) {
+      clearTimeout(hybridBoundaryTimer);
+      hybridBoundaryTimer = null;
+    }
+    hybridSession.index = nearby;
+    hybridSession.lastSpotifyIndex = nearby;
+  } else if (hybridSession.index >= hybridSession.items.length - 1) {
+    hybridSession = null;
+  }
+}
+
+function maybeEnterHybridLocal(positionMs) {
+  if (!hybridSession || hybridTransitioning || hybridBoundaryTimer) return;
+  const current = hybridSession.items[hybridSession.index];
+  const next = hybridSession.items[hybridSession.index + 1];
+  if (!current || !currentPlayback?.isPlaying) return;
+  const remaining = Math.max(0, (Number(currentPlayback.durationMs) || 0) - (Number(positionMs) || 0));
+
+  // Once the final Spotify song is nearly complete, release control so
+  // Spotify's own autoplay/recommendation queue can continue normally.
+  if (!next && !isLocalEntry(current) && remaining <= 450) {
+    hybridSession = null;
+    currentQueue = spotifyQueue;
+    if (currentQueue) renderQueue(currentQueue);
+    return;
+  }
+
+  const crossesEngines = Boolean(next) && isLocalEntry(current) !== isLocalEntry(next);
+  if (!crossesEngines || remaining > 1_200) return;
+  const delay = Math.max(0, remaining - 70);
+  hybridBoundaryTimer = setTimeout(async () => {
+    hybridBoundaryTimer = null;
+    if (!hybridSession || hybridTransitioning) return;
+    try {
+      if (playbackMode === "spotify") await controller?.togglePlay?.().catch(() => {});
+      else await localController?.pause?.().catch(() => {});
+      await playHybridIndex(hybridSession.index + 1, { fromEnded: true });
+    } catch (error) {
+      showToast(humanizeError(error));
+    }
+  }, delay);
+}
+
+async function finishHybridPlayback() {
+  clearTimeout(hybridBoundaryTimer);
+  hybridBoundaryTimer = null;
+  const session = hybridSession;
+  hybridSession = null;
+  if (!session) return;
+  if (playbackMode === "local") {
+    await localController?.pause?.().catch(() => {});
+    const hadHybridSpotify = session.lastSpotifyIndex >= 0 && controller;
+    const resumableSpotify = session.resumeSpotify?.itemUri && controller;
+    if (hadHybridSpotify || resumableSpotify) {
+      await activateSpotifyPlayback();
+      try {
+        if (hadHybridSpotify) {
+          // Spotify is paused on the last remote item that preceded the local
+          // segment. One next command hands control back to its real queue,
+          // including any autoplay/recommendation tail Spotify owns.
+          await controller.next();
+        } else if (session.resumeSpotify.wasPlaying && !spotifyPlayback?.isPlaying) {
+          // An all-local Spool overlay has no Spotify item to advance from.
+          // Resume the untouched Spotify session that was playing before the
+          // local-only playlist took over.
+          await controller.togglePlay();
+        }
+        await Promise.allSettled([
+          controller.refreshState?.(),
+          controller.refreshQueue?.(),
+        ]);
+      } catch (error) {
+        showToast("The hybrid playlist ended. Resume Spotify from another song if autoplay did not continue.");
+      }
+    }
+  }
+  currentQueue = playbackMode === "spotify" ? spotifyQueue : currentQueue;
+  if (currentQueue) renderQueue(currentQueue);
+}
+
+function renderHybridQueue() {
+  if (!hybridSession) return;
+  const current = hybridSession.items[hybridSession.index] || currentPlayback?.currentItem || null;
+  const hybridUpcoming = hybridSession.items.slice(hybridSession.index + 1);
+  const spotifyTail = Array.isArray(spotifyQueue?.items)
+    ? spotifyQueue.items
+    : Array.isArray(spotifyQueue?.upcoming) ? spotifyQueue.upcoming : [];
+  const seen = new Set(hybridUpcoming.map((item) => `${item.uri}|${item.title}`));
+  const tail = spotifyTail.filter((item) => !seen.has(`${item.uri}|${item.title}`));
+  currentQueue = {
+    status: "ready",
+    source: "hybrid",
+    currentItem: current,
+    items: [...hybridUpcoming, ...tail],
+    hybridLength: hybridUpcoming.length,
+  };
+  renderQueue(currentQueue);
+}
+
+function findPreviousSpotifyIndex(items, start) {
+  for (let index = Math.min(start, items.length - 1); index >= 0; index -= 1) {
+    if (!isLocalEntry(items[index])) return index;
+  }
+  return -1;
+}
+
+function countSpotifyBefore(items, index) {
+  return items.slice(0, Math.max(0, index)).filter((item) => !isLocalEntry(item)).length;
+}
+
+async function nextPlayback() {
+  if (hybridSession) return playHybridIndex(hybridSession.index + 1);
+  return activeController()?.next?.();
+}
+
+async function previousPlayback() {
+  if (hybridSession) {
+    if ((Number(currentPlayback?.positionMs) || 0) > 3_000) return activeController()?.seek?.(0);
+    return playHybridIndex(Math.max(0, hybridSession.index - 1));
+  }
+  return activeController()?.previous?.();
+}
+
+async function togglePlayback() {
+  return activeController()?.togglePlay?.();
+}
+
+async function searchSpotify(query, { force = false } = {}) {
   const normalizedQuery = String(query || "").trim();
   if (
+    !force &&
     normalizedQuery &&
     searchView.query === normalizedQuery &&
     ["loading", "ready"].includes(searchView.status)
@@ -1053,7 +1550,7 @@ async function searchSpotify(query) {
   const request = new AbortController();
   searchAbortController = request;
   try {
-    const results = await searchService.search(normalizedQuery, { signal: request.signal });
+    const results = await searchService.search(normalizedQuery, { signal: request.signal, force });
     if (searchAbortController !== request) return;
     searchView = { ...searchView, status: "ready", results, message: null };
     catalogCurrent = searchView;
@@ -1134,7 +1631,7 @@ function snapshotCatalogEntry(entry) {
   return { ...entry };
 }
 
-async function loadCatalogEntry(entry) {
+async function loadCatalogEntry(entry, { force = false } = {}) {
   catalogAbortController?.abort();
   catalogAbortController = undefined;
   if (!entry?.id) {
@@ -1161,7 +1658,19 @@ async function loadCatalogEntry(entry) {
       track: "loadTrack",
       playlist: "loadPlaylist",
     }[entry.kind];
-    const result = await service[method](entry.id, { signal: request.signal });
+    let result = await service[method](entry.id, { signal: request.signal, force });
+    if (entry.kind === "playlist" && hybridService && result?.playlist) {
+      const spotifyItems = result.spotifyItems || result.items || [];
+      const items = await hybridService.mergeCollection(entry.id, spotifyItems);
+      result = {
+        ...result,
+        spotifyItems,
+        items,
+        total: items.length,
+        durationMs: items.reduce((sum, item) => sum + (Number(item.durationMs) || 0), 0),
+        playlist: { ...result.playlist, total: items.length },
+      };
+    }
     if (catalogAbortController !== request || catalogCurrent !== entry) return;
     entry.status = "ready";
     entry.result = result;
@@ -1176,6 +1685,15 @@ async function loadCatalogEntry(entry) {
   } finally {
     if (catalogAbortController === request) catalogAbortController = undefined;
   }
+}
+
+
+function refreshCatalogCurrent() {
+  if (!catalogCurrent || catalogCurrent.kind === "search") {
+    if (searchView.query) return searchSpotify(searchView.query, { force: true });
+    return;
+  }
+  return loadCatalogEntry(catalogCurrent, { force: true });
 }
 
 function catalogService(kind) {
@@ -1271,6 +1789,7 @@ async function syncLyrics(playback) {
   lyricsAbortController?.abort();
   lyricsAbortController = undefined;
   currentLyricsTrackKey = trackKey;
+  currentLyrics = null;
 
   if (track.type && track.type !== "track") {
     renderLyrics({ status: "episode", track });
@@ -1287,51 +1806,148 @@ async function syncLyrics(playback) {
   try {
     const lyrics = await lyricsService.getLyrics(track, { signal: request.signal });
     if (lyricsAbortController !== request || currentLyricsTrackKey !== trackKey) return;
+    currentLyrics = lyrics;
     renderLyrics({ status: "ready", lyrics, track });
     updateLyricsPosition(currentPlayback?.positionMs || 0, { instant: true });
   } catch (error) {
     if (error?.name === "AbortError" || lyricsAbortController !== request) return;
     console.debug("Lyrics lookup failed.", safeDiagnostic(error, "lyrics"));
+    currentLyrics = null;
     renderLyrics({ status: "error", track });
   } finally {
     if (lyricsAbortController === request) lyricsAbortController = undefined;
   }
 }
 
+
 function resetLyrics(status = "empty") {
   lyricsAbortController?.abort();
   lyricsAbortController = undefined;
   currentLyricsTrackKey = undefined;
+  currentLyrics = null;
   renderLyrics({ status });
 }
 
+
+
+function currentLyricsTrack() {
+  return currentPlayback?.currentItem || currentPlayback?.item || null;
+}
+
+function openLyricsEditorModal() {
+  const track = currentLyricsTrack();
+  if (!track || track.type === "episode") {
+    showToast("Play a song before editing lyrics.");
+    return;
+  }
+  showLyricsEditor({
+    currentTrack: track,
+    lyrics: currentLyrics,
+    mode: currentLyrics?.lines?.length || currentLyrics?.instrumental ? "editor" : "choose",
+  });
+  openModal("modal-lyrics");
+}
+
+async function saveEditedLyrics(track, text) {
+  if (!lyricsService || !track) return;
+  try {
+    currentLyrics = await lyricsService.save(track, text, {
+      source: "manual",
+      userModified: true,
+    });
+    currentLyricsTrackKey = track.id || track.uri || currentLyricsTrackKey;
+    renderLyrics({ status: "ready", lyrics: currentLyrics, track });
+    updateLyricsPosition(currentPlayback?.positionMs || 0, { instant: true });
+    closeModals();
+    showToast("Lyrics saved.");
+  } catch (error) {
+    showToast(humanizeError(error));
+  }
+}
+
+async function searchLyricsForEditor(track, { target = "editor" } = {}) {
+  if (!lyricsService || !track) return;
+  lyricsImportTarget = target;
+  try {
+    showLyricsResults([]);
+    const results = await lyricsService.search(track);
+    showLyricsResults(results);
+  } catch (error) {
+    showLyricsResults([]);
+    showToast(humanizeError(error));
+  }
+}
+
+function openLyricsComputer({ target = "editor" } = {}) {
+  lyricsImportTarget = target;
+  document.getElementById("lyrics-file-input")?.click();
+}
+
+function openLyricsDropbox({ target = "editor" } = {}) {
+  lyricsImportTarget = target;
+  if (!dropboxService?.connected) {
+    showToast("Connect Dropbox in Settings first.");
+    openModal("modal-settings");
+    return;
+  }
+  openModal("modal-dropbox");
+  renderDropbox({ connected: true, status: "loading", path: "", mode: "lyrics" });
+  browseDropbox("", { mode: "lyrics" });
+}
+
+function deliverImportedLyrics(text) {
+  deliverLyricsText(text, { sync: lyricsImportTarget === "sync" });
+  openModal("modal-lyrics");
+}
+
 async function playQueueItem(selection) {
-  if (!controller?.playQueueItem) {
-    showToast("Wait for the Spool browser player to connect.");
+  const queueIndex = Math.max(0, Number(selection?.index) || 0);
+  if (hybridSession && currentQueue?.source === "hybrid") {
+    const hybridUpcoming = Math.max(0, Number(currentQueue.hybridLength) || 0);
+    try {
+      if (queueIndex < hybridUpcoming) {
+        await playHybridIndex(hybridSession.index + 1 + queueIndex);
+      } else {
+        // The Spotify-generated tail is still owned by Spotify. Preserve that
+        // live context and advance through it rather than replacing it with a
+        // copied URI list.
+        const tailIndex = queueIndex - hybridUpcoming;
+        hybridSession = null;
+        await activateSpotifyPlayback();
+        await controller?.playQueueItem?.({ ...selection, index: tailIndex });
+      }
+      renderSteadyConnection();
+    } catch (error) {
+      showToast(humanizeError(error));
+    }
+    return;
+  }
+
+  const target = activeController();
+  if (!target?.playQueueItem) {
+    showToast("Choose a song or wait for the player to connect.");
     return;
   }
   try {
-    await controller.playQueueItem(selection);
-    renderSteadyConnection();
+    await target.playQueueItem(selection);
+    if (playbackMode === "spotify") renderSteadyConnection();
   } catch (error) {
     showToast(humanizeError(error));
   }
 }
 
 async function refreshLibrary({ force = false } = {}) {
+  if (force && localLibrary) localTracks = await localLibrary.listTracks({ coverLimit: 32 });
+  const local = localLibrary ? localSource(localTracks) : null;
+
   if (!libraryService) {
-    renderLibrarySources({
-      status: "error",
-      message: "Log in to Spotify to open your Library.",
-    });
+    librarySources = local ? [local] : [];
+    showLibrarySources();
     return;
   }
   if (librarySources.length && !force) {
-    if (selectedLibrarySource) {
-      renderSelectedLibrary();
-    } else {
-      showLibrarySources();
-    }
+    if (selectedLibrarySource) renderSelectedLibrary();
+    else showLibrarySources();
     return;
   }
 
@@ -1344,13 +1960,20 @@ async function refreshLibrary({ force = false } = {}) {
   libraryAbortController = request;
   renderLibrarySources({ status: "loading" });
   try {
-    librarySources = await libraryService.loadSources({ force, signal: request.signal });
+    const spotifySources = await libraryService.loadSources({ force, signal: request.signal });
     if (libraryAbortController !== request) return;
+    librarySources = mergeLocalSource(spotifySources, local);
     showLibrarySources();
   } catch (error) {
     if (error?.name === "AbortError" || libraryAbortController !== request) return;
     console.warn("Spotify library failed to load.", safeDiagnostic(error, "library-sources"));
-    renderLibrarySources({ status: "error", message: humanizeLibraryError(error) });
+    librarySources = local ? [local] : [];
+    if (librarySources.length) {
+      showLibrarySources();
+      showToast("Spotify playlists could not refresh. Local Files is still available.");
+    } else {
+      renderLibrarySources({ status: "error", message: humanizeLibraryError(error) });
+    }
   } finally {
     if (libraryAbortController === request) libraryAbortController = undefined;
   }
@@ -1365,7 +1988,12 @@ function showLibrarySources() {
   renderLibrarySources({ sources: librarySources });
 }
 
-async function openLibrarySource(sourceId) {
+async function refreshCurrentLibraryView() {
+  if (!selectedLibrarySource) return refreshLibrary({ force: true });
+  return openLibrarySource(selectedLibrarySource.id, { force: true });
+}
+
+async function openLibrarySource(sourceId, { force = false } = {}) {
   const source = librarySources.find((candidate) => candidate.id === sourceId);
   if (!source?.canBrowse) return;
   selectedLibrarySource = source;
@@ -1373,42 +2001,52 @@ async function openLibrarySource(sourceId) {
   selectedLibraryNextOffset = null;
   selectedLibraryDurationMs = null;
   cancelLibraryRequest();
+
+  if (source.kind === "local") {
+    renderLibraryDetail({ source, status: "loading", total: source.total, currentUri: currentPlayback?.itemUri || null });
+    try {
+      if (force || !localTracks.length) localTracks = await localLibrary.listTracks({ coverLimit: 32 });
+      selectedLibrarySource = localSource(localTracks);
+      librarySources = mergeLocalSource(librarySources.filter((entry) => entry.kind !== "local"), selectedLibrarySource);
+      selectedLibraryItems = localTracks.map(normalizeLocalLibraryEntry);
+      selectedLibraryDurationMs = selectedLibraryItems.reduce((sum, item) => sum + (Number(item.durationMs) || 0), 0);
+      selectedLibraryNextOffset = null;
+      renderSelectedLibrary();
+    } catch (error) {
+      renderLibraryDetail({ source, status: "error", total: source.total, message: humanizeError(error), currentUri: currentPlayback?.itemUri || null });
+    }
+    return;
+  }
+
+  if (!libraryService) {
+    renderLibraryDetail({ source, status: "error", total: source.total, message: "Log in to Spotify to open this playlist." });
+    return;
+  }
+  if (force) libraryService.invalidateSource?.(source.id);
   const request = new AbortController();
   libraryAbortController = request;
   renderLibraryDetail({ source, status: "loading", total: source.total, currentUri: currentPlayback?.itemUri || null });
   try {
     const loadSource = libraryService.loadSource?.bind(libraryService);
     const page = loadSource
-      ? await loadSource(source, {
-          onProgress: (progress) => {
-            if (selectedLibrarySource?.id !== source.id) return;
-            selectedLibraryItems = progress.items;
-            selectedLibraryNextOffset = progress.nextOffset;
-            selectedLibraryDurationMs = progress.durationMs;
-            renderLibraryDetail({
-              source,
-              currentUri: currentPlayback?.itemUri || null,
-              items: selectedLibraryItems,
-              total: progress.total,
-              durationMs: progress.durationMs,
-              complete: progress.complete,
-              nextOffset: null,
-              message: progress.unavailableReason,
-            });
-          },
-          signal: request.signal,
-        })
+      ? await loadSource(source, { force, signal: request.signal })
       : await libraryService.loadSourcePage(source, { offset: 0, signal: request.signal });
-    if (libraryAbortController !== request) return;
-    if (selectedLibrarySource?.id !== source.id) return;
-    selectedLibraryItems = page.items;
+    if (libraryAbortController !== request || selectedLibrarySource?.id !== source.id) return;
+    const spotifyItems = page.items || [];
+    selectedLibraryItems = hybridService && ["liked", "playlist"].includes(source.kind)
+      ? await hybridService.mergeCollection(source.id, spotifyItems)
+      : spotifyItems;
     selectedLibraryNextOffset = page.nextOffset;
-    selectedLibraryDurationMs = page.durationMs ?? selectedLibraryDurationMs;
+    selectedLibraryDurationMs = selectedLibraryItems.reduce(
+      (sum, item) => sum + (Number(item.durationMs) || 0),
+      0,
+    );
+    source.total = selectedLibraryItems.length;
     renderLibraryDetail({
       source,
       currentUri: currentPlayback?.itemUri || null,
       items: selectedLibraryItems,
-      total: page.total,
+      total: selectedLibraryItems.length,
       durationMs: selectedLibraryDurationMs,
       complete: page.complete ?? page.nextOffset === null,
       nextOffset: loadSource ? null : page.nextOffset,
@@ -1417,16 +2055,40 @@ async function openLibrarySource(sourceId) {
   } catch (error) {
     if (error?.name === "AbortError" || libraryAbortController !== request) return;
     console.warn("Spotify library source failed to load.", safeDiagnostic(error, "library-items"));
-    renderLibraryDetail({
-      source,
-      currentUri: currentPlayback?.itemUri || null,
-      status: "error",
-      total: source.total,
-      message: humanizeLibraryError(error),
-    });
+    renderLibraryDetail({ source, currentUri: currentPlayback?.itemUri || null, status: "error", total: source.total, message: humanizeLibraryError(error) });
   } finally {
     if (libraryAbortController === request) libraryAbortController = undefined;
   }
+}
+
+
+
+function mergeLocalSource(sources = [], local = localLibrary ? localSource(localTracks) : null) {
+  const remote = (sources || []).filter((source) => source?.kind !== "local");
+  if (!local) return remote;
+  const likedIndex = remote.findIndex((source) => source.kind === "liked");
+  const index = likedIndex >= 0 ? likedIndex + 1 : 0;
+  remote.splice(index, 0, local);
+  return remote;
+}
+
+function normalizeLocalLibraryEntry(track) {
+  return {
+    ...track,
+    key: track.id,
+    id: track.id,
+    localId: track.id,
+    item: { ...track, id: track.id, uri: track.uri, type: "track", isLocal: true },
+    uri: track.uri,
+    title: track.title,
+    artist: track.artist,
+    artists: track.artists,
+    albumName: track.albumName || "Local Files",
+    durationMs: track.durationMs || 0,
+    playable: true,
+    unavailableReason: null,
+    isLocal: true,
+  };
 }
 
 function cancelLibraryRequest() {
@@ -1437,7 +2099,7 @@ function cancelLibraryRequest() {
 }
 
 async function loadMoreLibraryItems() {
-  if (!selectedLibrarySource || selectedLibraryNextOffset === null) return;
+  if (!selectedLibrarySource || selectedLibraryNextOffset === null || !libraryService) return;
   const source = selectedLibrarySource;
   const offset = selectedLibraryNextOffset;
   selectedLibraryNextOffset = null;
@@ -1445,27 +2107,27 @@ async function loadMoreLibraryItems() {
   try {
     const page = await libraryService.loadSourcePage(source, { offset });
     if (selectedLibrarySource?.id !== source.id) return;
-    selectedLibraryItems = [...selectedLibraryItems, ...page.items];
+    const combinedSpotify = [
+      ...selectedLibraryItems.filter((entry) => !isLocalEntry(entry)),
+      ...(page.items || []),
+    ];
+    selectedLibraryItems = hybridService && ["liked", "playlist"].includes(source.kind)
+      ? await hybridService.mergeCollection(source.id, combinedSpotify)
+      : combinedSpotify;
     selectedLibraryNextOffset = page.nextOffset;
     selectedLibraryDurationMs = selectedLibraryItems.reduce(
       (sum, item) => sum + (Number(item.durationMs) || 0),
       0,
     );
-    renderLibraryDetail({
-      source,
-      currentUri: currentPlayback?.itemUri || null,
-      items: selectedLibraryItems,
-      total: page.total,
-      durationMs: selectedLibraryDurationMs,
-      nextOffset: page.nextOffset,
-      message: page.unavailableReason,
-    });
+    source.total = selectedLibraryItems.length;
+    renderSelectedLibrary();
   } catch (error) {
     selectedLibraryNextOffset = offset;
     showToast(humanizeLibraryError(error));
     renderSelectedLibrary();
   }
 }
+
 
 function renderSelectedLibrary() {
   if (!selectedLibrarySource) return showLibrarySources();
@@ -1483,6 +2145,461 @@ function renderSelectedLibrary() {
   });
 }
 
+
+function bindLocalImport() {
+  const fileInput = document.getElementById("local-file-input");
+  const computer = document.getElementById("import-computer");
+  const dropbox = document.getElementById("import-dropbox");
+  computer?.addEventListener("click", () => fileInput?.click());
+  dropbox?.addEventListener("click", () => {
+    openModal("modal-dropbox");
+    renderDropbox({ connected: Boolean(dropboxService?.connected) });
+    if (dropboxService?.connected) browseDropbox("");
+  });
+  fileInput?.addEventListener("change", async () => {
+    const files = [...fileInput.files];
+    fileInput.value = "";
+    if (!files.length || !localLibrary) return;
+    const progress = document.getElementById("import-progress");
+    try {
+      if (progress) { progress.hidden = false; progress.textContent = `Importing ${files.length} file${files.length === 1 ? "" : "s"}…`; }
+      const imported = await localLibrary.importFiles(files, {
+        source: "computer",
+        onProgress: ({ current, total, name }) => {
+          if (progress) progress.textContent = `Importing ${current}/${total}: ${name}`;
+        },
+      });
+      await refreshLocalFilesAfterImport(imported.length);
+      closeModals();
+      openModal("modal-library");
+      await openLibrarySource("local-files", { force: true });
+    } catch (error) {
+      showToast(humanizeError(error));
+    } finally {
+      if (progress) progress.hidden = true;
+    }
+  });
+}
+
+function bindLibraryCreate() {
+  document.getElementById("lib-new")?.addEventListener("click", () => openCreatePlaylistModal());
+}
+
+
+async function refreshLocalFilesAfterImport(count = 0) {
+  localTracks = await localLibrary.listTracks({ coverLimit: 32 });
+  const source = localSource(localTracks);
+  librarySources = mergeLocalSource(librarySources, source);
+  if (selectedLibrarySource?.kind === "local") {
+    selectedLibrarySource = source;
+    selectedLibraryItems = localTracks.map(normalizeLocalLibraryEntry);
+    selectedLibraryDurationMs = selectedLibraryItems.reduce((sum, item) => sum + (Number(item.durationMs) || 0), 0);
+    renderSelectedLibrary();
+  }
+  if (count) showToast(`Added ${count} song${count === 1 ? "" : "s"} to Local Files.`);
+}
+
+async function openPlaylistPicker(track) {
+  playlistPickerCreateOnly = false;
+  const uri = track?.uri || "";
+  playlistPickerTrack = track && /^(?:spotify:track|spool:local):/u.test(uri) ? {
+    id: track.id || track.localId || uri.split(":").pop(),
+    localId: track.localId || localIdFromUri(uri),
+    uri,
+    title: track.title || "Song",
+    isLocal: uri.startsWith("spool:local:"),
+  } : null;
+  if (!playlistPickerTrack) {
+    showToast("Choose a song before adding it to a playlist.");
+    return;
+  }
+  playlistPickerMemberships = new Map();
+  resetPlaylistCreateForm();
+  openModal("modal-playlist");
+
+  if (!playlistPickerService) {
+    renderPlaylistPicker({ track: playlistPickerTrack, status: "error", message: "Log in again to approve playlist permissions." });
+    return;
+  }
+  renderPlaylistPicker({ track: playlistPickerTrack, status: "loading" });
+  try {
+    playlistPickerSources = await playlistPickerService.loadDestinations();
+    renderPlaylistPicker({
+      track: playlistPickerTrack,
+      sources: playlistPickerSources,
+      memberships: playlistPickerMemberships,
+    });
+    focusPlaylistPicker();
+  } catch (error) {
+    renderPlaylistPicker({ track: playlistPickerTrack, status: "error", message: humanizeError(error) });
+  }
+}
+
+
+async function checkPlaylistPickerMembership(source) {
+  if (!source || !playlistPickerTrack || !playlistPickerService) return;
+  const current = playlistPickerMemberships.get(source.id);
+  if (["checking", "ready", "saving"].includes(current?.status)) return;
+  const pending = { status: "checking", value: Boolean(current?.value) };
+  playlistPickerMemberships.set(source.id, pending);
+  updatePlaylistPickerMembership(source.id, pending);
+  try {
+    const value = await playlistPickerService.membership(source, playlistPickerTrack);
+    const ready = { status: "ready", value };
+    playlistPickerMemberships.set(source.id, ready);
+    updatePlaylistPickerMembership(source.id, ready);
+  } catch (error) {
+    const failed = { status: "error", value: false };
+    playlistPickerMemberships.set(source.id, failed);
+    updatePlaylistPickerMembership(source.id, failed);
+  }
+}
+
+async function togglePlaylistPickerMembership(source) {
+  if (!source || !playlistPickerTrack || !playlistPickerService) return;
+  let current = playlistPickerMemberships.get(source.id);
+  if (!current || current.status === "unknown" || current.status === "error") {
+    await checkPlaylistPickerMembership(source);
+    current = playlistPickerMemberships.get(source.id);
+  }
+  if (current?.status !== "ready") return;
+  const desired = !current.value;
+  const saving = { status: "saving", value: current.value };
+  playlistPickerMemberships.set(source.id, saving);
+  updatePlaylistPickerMembership(source.id, saving);
+  try {
+    const mergedItems = source.id === selectedLibrarySource?.id
+      ? selectedLibraryItems
+      : catalogCurrent?.kind === "playlist" && catalogCurrent.result?.playlist?.id === source.id
+        ? catalogCurrent.result.items
+        : undefined;
+    await playlistPickerService.setMembership(source, playlistPickerTrack, desired, { mergedItems });
+    const ready = { status: "ready", value: desired };
+    playlistPickerMemberships.set(source.id, ready);
+    updatePlaylistPickerMembership(source.id, ready);
+    await refreshVisiblePlaylistAfterMutation(source.id);
+    showToast(desired ? `Added to ${source.name}.` : `Removed from ${source.name}.`);
+  } catch (error) {
+    playlistPickerMemberships.set(source.id, current);
+    updatePlaylistPickerMembership(source.id, current);
+    showToast(humanizeError(error));
+  }
+}
+
+
+function createPlaylistFromPicker() {
+  return openCreatePlaylistModal();
+}
+
+
+
+function openCreatePlaylistModal() {
+  playlistCreateTrack = playlistPickerTrack;
+  prepareCreatePlaylist({ track: playlistCreateTrack });
+  openModal("modal-playlist-create");
+}
+
+async function createPlaylistFromEditor({ name, description, public: isPublic, coverFile, track } = {}) {
+  if (!playlistPickerService) {
+    showToast("Log in to Spotify before creating a playlist.");
+    return;
+  }
+  setPlaylistEditorBusy("create", true, "Creating playlist…");
+  try {
+    const source = await playlistPickerService.createPlaylist({
+      name,
+      description,
+      public: isPublic,
+    });
+    if (coverFile && playlistService) {
+      const prepared = await preparePlaylistCover(coverFile);
+      await playlistService.uploadCover(source.id, prepared);
+    }
+    if (track?.uri) {
+      await playlistPickerService.setMembership(source, track, true);
+    }
+    playlistPickerSources = [source, ...playlistPickerSources.filter((item) => item.id !== source.id)];
+    librarySources = mergeLocalSource(libraryService?.sources || librarySources, localLibrary ? localSource(localTracks) : null);
+    playlistPickerMemberships.set(source.id, { status: "ready", value: Boolean(track) });
+    closeModals();
+    showToast(track ? `Created ${source.name} and added the song.` : `Created ${source.name}.`);
+    await refreshLibrary({ force: true });
+  } catch (error) {
+    setPlaylistEditorBusy("create", false, humanizeError(error));
+    showToast(humanizeError(error));
+    return;
+  }
+  setPlaylistEditorBusy("create", false);
+}
+
+function openEditPlaylistModal(playlistId) {
+  const playlist = findPlaylistModel(playlistId);
+  if (!playlist?.owned) {
+    showToast("Only playlists you own can have their details edited.");
+    return;
+  }
+  playlistEditTarget = playlist;
+  prepareEditPlaylist(playlist);
+  openModal("modal-playlist-edit");
+}
+
+async function updatePlaylistFromEditor({ playlist, name, description, public: isPublic, coverFile } = {}) {
+  if (!playlistService || !playlist?.id) return;
+  setPlaylistEditorBusy("edit", true, "Saving playlist…");
+  try {
+    await playlistService.updateDetails(playlist.id, { name, description, public: isPublic });
+    if (coverFile) {
+      const prepared = await preparePlaylistCover(coverFile);
+      await playlistService.uploadCover(playlist.id, prepared);
+    }
+    updatePlaylistModels(playlist.id, {
+      name,
+      description,
+      public: isPublic,
+      ...(coverFile ? { artworkUrl: null } : {}),
+    });
+    closeModals();
+    showToast("Playlist details saved.");
+    await refreshVisiblePlaylistAfterMutation(playlist.id, { force: true });
+  } catch (error) {
+    setPlaylistEditorBusy("edit", false, humanizeError(error));
+    showToast(humanizeError(error));
+    return;
+  }
+  setPlaylistEditorBusy("edit", false);
+}
+
+function findPlaylistModel(playlistId) {
+  const id = String(playlistId || "");
+  if (catalogCurrent?.kind === "playlist" && catalogCurrent.result?.playlist?.id === id) {
+    return catalogCurrent.result.playlist;
+  }
+  if (selectedLibrarySource?.id === id) return selectedLibrarySource;
+  return librarySources.find((source) => source.id === id) || null;
+}
+
+function updatePlaylistModels(playlistId, patch) {
+  const id = String(playlistId || "");
+  librarySources = librarySources.map((source) => source.id === id ? { ...source, ...patch } : source);
+  if (selectedLibrarySource?.id === id) selectedLibrarySource = { ...selectedLibrarySource, ...patch };
+  if (catalogCurrent?.kind === "playlist" && catalogCurrent.result?.playlist?.id === id) {
+    catalogCurrent.result.playlist = { ...catalogCurrent.result.playlist, ...patch };
+  }
+}
+
+async function refreshVisiblePlaylistAfterMutation(playlistId, { force = false } = {}) {
+  playlistService?.invalidate?.(playlistId);
+  libraryService?.invalidateSource?.(playlistId);
+  if (catalogCurrent?.kind === "playlist" && catalogCurrent.result?.playlist?.id === playlistId) {
+    await loadCatalogEntry(catalogCurrent, { force: true });
+  }
+  if (selectedLibrarySource?.id === playlistId) {
+    await openLibrarySource(playlistId, { force: true });
+  }
+  if (selectedLibrarySource?.id === "liked-songs" && playlistId === "liked-songs") {
+    await openLibrarySource("liked-songs", { force: true });
+  }
+}
+
+async function reorderCatalogPlaylistItem({ playlistId, fromIndex, toIndex }) {
+  return reorderMergedPlaylist(playlistId, fromIndex, toIndex, {
+    items: catalogCurrent?.result?.items,
+    playlist: catalogCurrent?.result?.playlist,
+  });
+}
+
+async function reorderLibraryPlaylistItem({ sourceId, fromIndex, toIndex }) {
+  return reorderMergedPlaylist(sourceId, fromIndex, toIndex, {
+    items: selectedLibraryItems,
+    playlist: selectedLibrarySource,
+  });
+}
+
+async function reorderMergedPlaylist(playlistId, fromIndex, toIndex, { items, playlist } = {}) {
+  if (!Array.isArray(items) || fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return;
+  const original = [...items];
+  const moved = original[fromIndex];
+  const reordered = [...original];
+  reordered.splice(fromIndex, 1);
+  reordered.splice(toIndex, 0, moved);
+
+  applyMergedItemsToVisiblePlaylist(playlistId, reordered);
+  try {
+    if (isLocalEntry(moved)) {
+      await hybridService.saveMergedOrder(playlistId, reordered);
+    } else {
+      if (!playlist?.canModifyItems) throw new Error("Spotify does not allow Spool to reorder this playlist.");
+      const originalSpotify = original.filter((item) => !isLocalEntry(item));
+      const reorderedSpotify = reordered.filter((item) => !isLocalEntry(item));
+      const remoteOrderChanged = originalSpotify.some((item, index) => item !== reorderedSpotify[index]);
+      if (remoteOrderChanged) {
+        const fromSpotify = originalSpotify.indexOf(moved);
+        const targetSpotify = reorderedSpotify.indexOf(moved);
+        const insertBefore = targetSpotify > fromSpotify ? targetSpotify + 1 : targetSpotify;
+        await playlistService.reorder(playlistId, {
+          rangeStart: fromSpotify,
+          insertBefore,
+          snapshotId: playlist.snapshotId || null,
+        });
+      }
+      // Moving a Spotify row across only local rows does not alter Spotify's
+      // remote sequence; in that case only the local placement anchors change.
+      await hybridService.saveMergedOrder(playlistId, reordered);
+    }
+    showToast("Playlist order updated.");
+    await refreshVisiblePlaylistAfterMutation(playlistId, { force: true });
+  } catch (error) {
+    applyMergedItemsToVisiblePlaylist(playlistId, original);
+    showToast(humanizeError(error));
+  }
+}
+
+async function removeCatalogPlaylistItem({ playlistId, index }) {
+  return removeMergedPlaylistItem(playlistId, index, {
+    items: catalogCurrent?.result?.items,
+    playlist: catalogCurrent?.result?.playlist,
+  });
+}
+
+async function removeLibraryPlaylistItem({ sourceId, index }) {
+  return removeMergedPlaylistItem(sourceId, index, {
+    items: selectedLibraryItems,
+    playlist: selectedLibrarySource,
+  });
+}
+
+async function removeMergedPlaylistItem(playlistId, index, { items, playlist } = {}) {
+  if (!Array.isArray(items) || index < 0 || index >= items.length) return;
+  const entry = items[index];
+  const next = items.filter((_, itemIndex) => itemIndex !== index);
+  try {
+    if (isLocalEntry(entry)) {
+      await hybridService.setLocalTrackMembership(playlistId, entry.localId || localIdFromUri(entry.uri), false);
+      await hybridService.saveMergedOrder(playlistId, next);
+    } else if (playlistId === "liked-songs") {
+      await playlistPickerService.setMembership({ id: "liked-songs", kind: "liked", name: "Liked Songs" }, entry, false);
+    } else {
+      if (!playlist?.canModifyItems) throw new Error("Spotify does not allow Spool to remove songs from this playlist.");
+      await playlistService.removeItem(playlistId, entry, { snapshotId: playlist.snapshotId || null });
+      await hybridService.saveMergedOrder(playlistId, next);
+    }
+    applyMergedItemsToVisiblePlaylist(playlistId, next);
+    showToast(`Removed ${entry.title || "song"} from the playlist.`);
+    await refreshVisiblePlaylistAfterMutation(playlistId, { force: true });
+  } catch (error) {
+    showToast(humanizeError(error));
+  }
+}
+
+function applyMergedItemsToVisiblePlaylist(playlistId, items) {
+  const durationMs = items.reduce((sum, item) => sum + (Number(item.durationMs) || 0), 0);
+  if (catalogCurrent?.kind === "playlist" && catalogCurrent.result?.playlist?.id === playlistId) {
+    catalogCurrent.result.items = items;
+    catalogCurrent.result.durationMs = durationMs;
+    catalogCurrent.result.playlist.total = items.length;
+    renderCatalogCurrent({ animate: false });
+  }
+  if (selectedLibrarySource?.id === playlistId) {
+    selectedLibraryItems = items;
+    selectedLibraryDurationMs = durationMs;
+    selectedLibrarySource.total = items.length;
+    renderSelectedLibrary();
+  }
+}
+
+async function deleteLocalTrack(localId) {
+  const track = localTracks.find((item) => item.id === localId);
+  if (!track) return;
+  if (!confirm(`Delete “${track.title}” from Local Files and every Spool playlist?`)) return;
+  try {
+    if (currentPlayback?.itemUri === track.uri) await localController?.pause?.();
+    await Promise.all([
+      hybridService?.removeLocalTrackEverywhere(localId),
+      lyricsService?.clear?.(track),
+    ]);
+    await localLibrary.deleteTrack(localId);
+    if (hybridSession) {
+      const nextItems = hybridSession.items.filter((entry) => (
+        !isLocalEntry(entry) || (entry.localId || localIdFromUri(entry.uri)) !== localId
+      ));
+      const removedBeforeCurrent = hybridSession.items
+        .slice(0, hybridSession.index)
+        .some((entry) => isLocalEntry(entry) && (entry.localId || localIdFromUri(entry.uri)) === localId);
+      hybridSession.items = nextItems;
+      if (removedBeforeCurrent) hybridSession.index = Math.max(0, hybridSession.index - 1);
+      if (!nextItems.length) hybridSession = null;
+    }
+    localTracks = await localLibrary.listTracks({ coverLimit: 32 });
+    librarySources = mergeLocalSource(librarySources, localSource(localTracks));
+    if (selectedLibrarySource?.kind === "local") await openLibrarySource("local-files", { force: true });
+    if (catalogCurrent?.kind === "playlist") await loadCatalogEntry(catalogCurrent, { force: true });
+    showToast("Local file deleted.");
+  } catch (error) {
+    showToast(humanizeError(error));
+  }
+}
+
+async function connectDropbox() {
+  try {
+    await dropboxService?.beginConnect();
+    renderDropbox({ connected: false, message: "Dropbox opened in a new tab. Paste the returned code here." });
+  } catch (error) {
+    showToast(humanizeError(error));
+  }
+}
+
+async function finishDropboxConnection(code) {
+  if (!code) return showToast("Paste the Dropbox authorization code first.");
+  try {
+    await dropboxService.finishConnect(code);
+    showToast("Dropbox connected.");
+    await browseDropbox("", { mode: dropboxBrowseMode });
+  } catch (error) {
+    renderDropbox({ connected: false, message: humanizeError(error) });
+  }
+}
+
+function disconnectDropbox() {
+  dropboxService?.disconnect();
+  renderDropbox({ connected: false });
+  showToast("Dropbox disconnected.");
+}
+
+async function browseDropbox(path = "", { mode = dropboxBrowseMode, force = false } = {}) {
+  dropboxBrowseMode = mode === "lyrics" ? "lyrics" : "audio";
+  if (!dropboxService?.connected) {
+    renderDropbox({ connected: false, mode: dropboxBrowseMode });
+    openModal("modal-dropbox");
+    return;
+  }
+  renderDropbox({ connected: true, status: "loading", path, mode: dropboxBrowseMode });
+  openModal("modal-dropbox");
+  try {
+    const entries = await dropboxService.list(path, { mode: dropboxBrowseMode, force });
+    renderDropbox({ connected: true, status: "ready", path, entries, mode: dropboxBrowseMode });
+  } catch (error) {
+    renderDropbox({ connected: true, status: "error", path, message: humanizeError(error), mode: dropboxBrowseMode });
+  }
+}
+
+async function importDropboxFile({ path, name, mode = dropboxBrowseMode }) {
+  if (!path) return;
+  try {
+    if (mode === "lyrics") {
+      const blob = await dropboxService.download(path);
+      deliverImportedLyrics(await blob.text());
+      return;
+    }
+    if (!localLibrary) return;
+    showToast(`Importing ${name}…`);
+    const blob = await dropboxService.download(path);
+    await localLibrary.importBlob(blob, name, { source: "dropbox" });
+    await refreshLocalFilesAfterImport(1);
+  } catch (error) {
+    showToast(humanizeError(error));
+  }
+}
+
 function bindVolume() {
   const range = getElements().volumeRange;
   if (!range) return;
@@ -1492,11 +2609,12 @@ function bindVolume() {
     renderVolume();
     clearTimeout(timer);
     timer = setTimeout(async () => {
+      const target = activeController();
       try {
-        await controller?.setVolume?.(currentVolume);
+        await target?.setVolume?.(currentVolume);
       } catch (error) {
         showToast(humanizeError(error));
-        controller?.refreshVolume?.().catch(() => {});
+        target?.refreshVolume?.().catch(() => {});
       }
     }, 70);
   });
@@ -1507,7 +2625,7 @@ function renderVolume() {
   if (!volumeRange || !volumeValue) return;
   const volume = Math.min(1, Math.max(0, Number(currentVolume) || 0));
   volumeRange.value = String(volume);
-  volumeRange.disabled = !controller?.deviceId;
+  volumeRange.disabled = !activeController();
   volumeValue.textContent = `${Math.round(volume * 100)}%`;
 }
 
@@ -1543,6 +2661,7 @@ function bindSoundSettings() {
 
 function setPlaybackSpeed(speed) {
   soundSettings.speed = Math.min(2.5, Math.max(0.25, Number(speed) || 1));
+  if (playbackMode === "local") localController?.setSpeed?.(soundSettings.speed).catch(() => {});
   applySoundSettings();
   renderSoundSettings();
   scheduleUiPreferencesSave();
@@ -1569,10 +2688,11 @@ function renderSoundSettings() {
   const speed = Math.min(2.5, Math.max(0.25, Number(soundSettings.speed) || 1));
   const reverb = Math.min(1, Math.max(0, Number(soundSettings.reverb) || 0));
   const captured = audioEffects.hasCapture();
+  const localActive = playbackMode === "local";
 
   if (elements.speedRange) {
     elements.speedRange.value = String(speed);
-    elements.speedRange.disabled = !captured;
+    elements.speedRange.disabled = !(captured || localActive);
   }
   if (elements.speedValue) elements.speedValue.textContent = `${speed.toFixed(2)}x`;
   if (elements.reverbRange) {
@@ -1581,9 +2701,11 @@ function renderSoundSettings() {
   }
   if (elements.reverbValue) elements.reverbValue.textContent = `${Math.round(reverb * 100)}%`;
   if (elements.soundCaptureStatus) {
-    elements.soundCaptureStatus.textContent = captured
-      ? "Audio output captured"
-      : "Spotify audio is not exposed to page capture";
+    elements.soundCaptureStatus.textContent = localActive
+      ? "Local file playback — speed is available"
+      : captured
+        ? "Audio output captured"
+        : "Spotify audio is not exposed to page capture";
   }
   if (elements.eqValue) {
     elements.eqValue.textContent = soundSettings.eqPreset === "Flat"
@@ -1634,37 +2756,31 @@ function renderPreferenceToggle(toggle, active) {
 }
 
 async function runMediaCommand(command) {
-  if (!controller || !currentPlayback?.activeDevice) return;
-  try {
-    await command();
-  } catch (error) {
-    showToast(humanizeError(error));
-  }
+  if (!activeController() || !currentPlayback?.activeDevice) return;
+  try { await command(); } catch (error) { showToast(humanizeError(error)); }
 }
 
 function bindPlaybackButtons() {
   const elements = getElements();
-  bindCommand([elements.play, elements.immersivePlay], () => controller?.togglePlay());
-  bindCommand([elements.previous, elements.immersivePrevious], () => controller?.previous());
-  bindCommand([elements.next, elements.immersiveNext], () => controller?.next());
-  bindCommand([elements.shuffle, elements.immersiveShuffle], () =>
-    controller?.setShuffle(!currentPlayback?.shuffleEnabled),
-  );
-  bindCommand([elements.repeat, elements.immersiveRepeat], () => controller?.cycleRepeat());
+  bindCommand([elements.play, elements.immersivePlay], togglePlayback);
+  bindCommand([elements.previous, elements.immersivePrevious], previousPlayback);
+  bindCommand([elements.next, elements.immersiveNext], nextPlayback);
+  for (const shuffle of [elements.shuffle, elements.immersiveShuffle].filter(Boolean)) {
+    shuffle.disabled = true;
+    shuffle.setAttribute("aria-disabled", "true");
+    shuffle.title = "Shuffle is disabled while Spool develops hybrid playlist playback";
+  }
+  bindCommand([elements.repeat, elements.immersiveRepeat], () => activeController()?.cycleRepeat());
 }
 
 function bindCommand(elements, command) {
   for (const element of elements.filter(Boolean)) {
     element.addEventListener("click", async () => {
-      if (!controller) {
-        showToast("Connect the Spool player first.");
+      if (!activeController()) {
+        showToast("Choose a local song or connect Spotify first.");
         return;
       }
-      try {
-        await command();
-      } catch (error) {
-        showToast(humanizeError(error));
-      }
+      try { await command(); } catch (error) { showToast(humanizeError(error)); }
     });
   }
 }
@@ -1673,7 +2789,6 @@ function bindSeekSurface(surface) {
   if (!surface) return;
   let dragging = false;
   let previewPosition = 0;
-
   const preview = (clientX) => {
     const track = surface.querySelector(".seek-track");
     const duration = currentPlayback?.durationMs || 0;
@@ -1685,7 +2800,6 @@ function bindSeekSurface(surface) {
     renderImmersive({ ...currentPlayback, positionMs: previewPosition });
     return previewPosition;
   };
-
   surface.addEventListener("pointerdown", (event) => {
     if (!currentPlayback?.activeDevice || !currentPlayback.durationMs) return;
     dragging = true;
@@ -1693,35 +2807,22 @@ function bindSeekSurface(surface) {
     preview(event.clientX);
     event.preventDefault();
   });
-  surface.addEventListener("pointermove", (event) => {
-    if (dragging) preview(event.clientX);
-  });
+  surface.addEventListener("pointermove", (event) => { if (dragging) preview(event.clientX); });
   surface.addEventListener("pointerup", async (event) => {
     if (!dragging) return;
     dragging = false;
     preview(event.clientX);
-    try {
-      await controller?.seek(previewPosition);
-    } catch (error) {
-      renderPlayback(currentPlayback);
-      showToast(humanizeError(error));
-    }
+    try { await activeController()?.seek(previewPosition); }
+    catch (error) { renderPlayback(currentPlayback); showToast(humanizeError(error)); }
   });
   surface.addEventListener("keydown", async (event) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-    if (!controller || !currentPlayback?.durationMs) return;
+    const target = activeController();
+    if (!target || !currentPlayback?.durationMs) return;
     event.preventDefault();
     const delta = event.shiftKey ? 15_000 : 5_000;
-    const position = event.key === "Home"
-      ? 0
-      : event.key === "End"
-        ? currentPlayback.durationMs
-        : currentPlayback.positionMs + (event.key === "ArrowRight" ? delta : -delta);
-    try {
-      await controller.seek(position);
-    } catch (error) {
-      showToast(humanizeError(error));
-    }
+    const position = event.key === "Home" ? 0 : event.key === "End" ? currentPlayback.durationMs : currentPlayback.positionMs + (event.key === "ArrowRight" ? delta : -delta);
+    try { await target.seek(position); } catch (error) { showToast(humanizeError(error)); }
   });
 }
 
@@ -1730,57 +2831,47 @@ function bindDock() {
     queueVisible = !queueVisible;
     setQueueVisible(queueVisible);
     saveUiPreferences();
-    if (queueVisible) controller?.refreshQueue?.().catch(() => {});
+    if (queueVisible) activeController()?.refreshQueue?.().catch(() => {});
   });
 }
 
 async function executeCommand(command) {
   const { name, args, argument } = command;
   const requirePlayback = () => {
-    if (!controller || !currentPlayback?.activeDevice) {
-      throw new Error("Use Spool as the active Spotify device first.");
+    const target = activeController();
+    if (!target || !currentPlayback?.activeDevice) {
+      throw new Error("Choose a local song or use Spool as the active Spotify device first.");
     }
+    return target;
   };
 
   if (name === "help" || name === "?") {
     return {
       keepOpen: true,
-      message: "play [song/artist/album/playlist] · pause · next · prev · seek 1:20/+30 · volume 65 · shuffle on/off · repeat off/context/track · queue [song] · open artist/album/song/playlist · search · library · lyrics · fullscreen · device",
+      message: "play [song/artist/album/playlist] · pause · next · prev · seek 1:20/+30 · volume 65 · repeat off/context/track · queue [song] · open artist/album/song/playlist · search · library · lyrics · fullscreen · device",
     };
   }
-  if (name === "play" && !argument) {
-    requirePlayback();
-    await controller.togglePlay();
-    return;
-  }
+  if (name === "play" && !argument) { requirePlayback(); await togglePlayback(); return; }
   if (name === "pause") {
     requirePlayback();
-    if (currentPlayback?.isPlaying) await controller.togglePlay();
+    if (currentPlayback?.isPlaying) await togglePlayback();
     return;
   }
-  if (name === "next") {
-    requirePlayback();
-    await controller.next();
-    return;
-  }
-  if (name === "prev") {
-    requirePlayback();
-    await controller.previous();
-    return;
-  }
+  if (name === "next") { requirePlayback(); await nextPlayback(); return; }
+  if (name === "prev") { requirePlayback(); await previousPlayback(); return; }
   if (name === "seek") {
-    requirePlayback();
+    const targetController = requirePlayback();
     const target = parseSeekArgument(argument, currentPlayback?.positionMs || 0);
     if (target === null) throw new Error("Use seek 1:20, seek 75, seek +30, or seek -15.");
-    await controller.seek(target);
+    await targetController.seek(target);
     return;
   }
   if (name === "volume") {
-    requirePlayback();
+    const target = requirePlayback();
     const numeric = Number(argument.replace(/%$/u, ""));
     if (!Number.isFinite(numeric)) throw new Error("Use volume 0-100.");
     const volume = numeric > 1 ? numeric / 100 : numeric;
-    await controller.setVolume(Math.max(0, Math.min(1, volume)));
+    await target.setVolume(Math.max(0, Math.min(1, volume)));
     return;
   }
   if (name === "speed") {
@@ -1790,22 +2881,14 @@ async function executeCommand(command) {
     return;
   }
   if (name === "shuffle") {
-    requirePlayback();
-    const value = argument.toLowerCase();
-    const enabled = ["on", "true", "1"].includes(value)
-      ? true
-      : ["off", "false", "0"].includes(value)
-        ? false
-        : !currentPlayback?.shuffleEnabled;
-    await controller.setShuffle(enabled);
-    return;
+    throw new Error("Shuffle is temporarily disabled while Spool develops hybrid playlist playback.");
   }
   if (name === "repeat") {
-    requirePlayback();
+    const target = requirePlayback();
     const value = argument.toLowerCase();
     const mode = value === "all" ? "context" : value === "one" ? "track" : value;
-    if (!mode) await controller.cycleRepeat();
-    else if (["off", "context", "track"].includes(mode)) await controller.setRepeat(mode);
+    if (!mode) await target.cycleRepeat();
+    else if (["off", "context", "track"].includes(mode)) await target.setRepeat(mode);
     else throw new Error("Use repeat off, repeat context, or repeat track.");
     return;
   }
@@ -1814,10 +2897,10 @@ async function executeCommand(command) {
       queueVisible = !queueVisible;
       setQueueVisible(queueVisible);
       saveUiPreferences();
-      if (queueVisible) await controller?.refreshQueue?.();
+      if (queueVisible) await activeController()?.refreshQueue?.();
       return;
     }
-    requirePlayback();
+    if (!controller) throw new Error("Log in to Spotify to search and add to its queue.");
     const results = await commandSearch(argument);
     const track = results.tracks?.[0];
     if (!track?.uri) throw new Error(`No playable song found for “${argument}”.`);
@@ -1832,53 +2915,23 @@ async function executeCommand(command) {
     focusSearch();
     return;
   }
-  if (name === "open") {
-    await executeOpenCommand(args);
-    return;
-  }
-  if (name === "library") {
-    openModal("modal-library");
-    return;
-  }
+  if (name === "open") { await executeOpenCommand(args); return; }
+  if (name === "library") { openModal("modal-library"); return; }
   if (name === "lyrics") {
     lyricsVisible = !lyricsVisible;
     setLyricsVisible(lyricsVisible);
     saveUiPreferences();
     return;
   }
-  if (name === "fullscreen") {
-    toggleImmersive();
-    return;
-  }
-  if (name === "settings") {
-    openModal("modal-settings");
-    return;
-  }
-  if (name === "sound") {
-    openModal("modal-eq");
-    return;
-  }
-  if (name === "device") {
-    await executeDeviceCommand(argument);
-    return;
-  }
+  if (name === "fullscreen") { toggleImmersive(); return; }
+  if (name === "settings") { openModal("modal-settings"); return; }
+  if (name === "sound") { openModal("modal-eq"); return; }
+  if (name === "device") { await executeDeviceCommand(argument); return; }
   if (name === "status") {
-    return {
-      keepOpen: true,
-      message: currentPlayback?.title
-        ? `${currentPlayback.title} — ${currentPlayback.artist || "Unknown artist"} · ${currentPlayback.isPlaying ? "playing" : "paused"}`
-        : "Nothing is playing.",
-    };
+    return { keepOpen: true, message: currentPlayback?.title ? `${currentPlayback.title} — ${currentPlayback.artist || "Unknown artist"} · ${currentPlayback.isPlaying ? "playing" : "paused"} · ${playbackMode}` : "Nothing is playing." };
   }
-  if (name === "play") {
-    requirePlayback();
-    await executePlayCommand(args);
-    return;
-  }
+  if (name === "play") { await executePlayCommand(args); return; }
 
-  // An unrecognized command doubles as a catalog play query, matching the
-  // original player's quick fuzzy command behavior without searching per key.
-  requirePlayback();
   await executePlayCommand([command.raw]);
 }
 
@@ -1966,8 +3019,8 @@ function bindKeyboard() {
     }
     if (event.ctrlKey && event.shiftKey && event.code === "KeyH") {
       event.preventDefault();
-      if (config?.mock || auth?.hasSession()) toggleHiddenMode({ userInitiated: true });
-      else showToast("Finish setup before using hidden mode.");
+      if (config?.mock || auth?.hasSession() || localTracks.length) toggleHiddenMode({ userInitiated: true });
+      else showToast("Play or import something before using hidden mode.");
       return;
     }
     if (isTypingTarget(event.target)) return;
@@ -1975,17 +3028,17 @@ function bindKeyboard() {
 
     if (event.code === "Space") {
       event.preventDefault();
-      await runKeyboardCommand(() => controller?.togglePlay());
+      await runKeyboardCommand(togglePlayback);
     } else if (event.code === "ArrowRight" && event.shiftKey) {
       event.preventDefault();
-      await runKeyboardCommand(() => controller?.next());
+      await runKeyboardCommand(nextPlayback);
     } else if (event.code === "ArrowLeft" && event.shiftKey) {
       event.preventDefault();
-      await runKeyboardCommand(() => controller?.previous());
+      await runKeyboardCommand(previousPlayback);
     } else if (event.code === "ArrowRight" || event.code === "ArrowLeft") {
       event.preventDefault();
       const delta = event.code === "ArrowRight" ? 5_000 : -5_000;
-      await runKeyboardCommand(() => controller?.seek((currentPlayback?.positionMs || 0) + delta));
+      await runKeyboardCommand(() => activeController()?.seek((currentPlayback?.positionMs || 0) + delta));
     } else if (event.code === "ArrowUp" || event.code === "ArrowDown") {
       event.preventDefault();
       if (event.shiftKey) {
@@ -1994,7 +3047,7 @@ function bindKeyboard() {
         showToast(`Speed ${soundSettings.speed.toFixed(2)}x`);
       } else {
         const delta = event.code === "ArrowUp" ? 0.05 : -0.05;
-        await runKeyboardCommand(() => controller?.setVolume(
+        await runKeyboardCommand(() => activeController()?.setVolume(
           Math.min(1, Math.max(0, currentVolume + delta)),
         ));
       }
@@ -2002,7 +3055,7 @@ function bindKeyboard() {
       queueVisible = !queueVisible;
       setQueueVisible(queueVisible);
       saveUiPreferences();
-      if (queueVisible) controller?.refreshQueue?.().catch(() => {});
+      if (queueVisible) activeController()?.refreshQueue?.().catch(() => {});
     } else if (event.code === "KeyL") {
       lyricsVisible = !lyricsVisible;
       setLyricsVisible(lyricsVisible);
@@ -2014,8 +3067,8 @@ function bindKeyboard() {
       setDockVisible(dockVisible);
       saveUiPreferences();
     } else if (event.code === "KeyH" && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      if (config?.mock || auth?.hasSession()) toggleHiddenMode({ userInitiated: true });
-      else showToast("Finish setup before using hidden mode.");
+      if (config?.mock || auth?.hasSession() || localTracks.length) toggleHiddenMode({ userInitiated: true });
+      else showToast("Play or import something before using hidden mode.");
     } else if (event.code === "KeyA") {
       openModal("modal-import");
     } else if (event.key === "/") {
@@ -2037,8 +3090,8 @@ function bindKeyboard() {
 }
 
 async function runKeyboardCommand(command) {
-  if (!controller || !currentPlayback?.activeDevice) {
-    showToast("Use Spool as the active Spotify device first.");
+  if (!activeController() || !currentPlayback?.activeDevice) {
+    showToast("Choose a local song or use Spool as the active Spotify device first.");
     return;
   }
   try {

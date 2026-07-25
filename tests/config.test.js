@@ -26,7 +26,11 @@ test("configuration uses the exact loopback redirect and requested scopes", () =
     "user-modify-playback-state",
     "playlist-read-private",
     "playlist-read-collaborative",
+    "playlist-modify-private",
+    "playlist-modify-public",
     "user-library-read",
+    "user-library-modify",
+    "ugc-image-upload",
   ]);
 });
 

@@ -51,7 +51,11 @@ test("playlist metadata normalizes for the shared catalog detail page", () => {
     ownerName: "Spool User",
     public: true,
     collaborative: false,
+    owned: false,
+    editable: false,
+    canModifyItems: false,
     total: 2,
+    snapshotId: null,
     externalUrl: "https://open.spotify.com/playlist/playlist-1",
   });
 });

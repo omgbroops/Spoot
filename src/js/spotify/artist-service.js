@@ -1,3 +1,4 @@
+import { SessionCache } from "../core/session-cache.js";
 const PAGE_SIZE = 10;
 
 function firstImage(images) {
@@ -63,11 +64,11 @@ export class SpotifyArtistService {
       throw new TypeError("SpotifyArtistService requires Spotify artist API methods.");
     }
     this.apiClient = apiClient;
-    this.cache = new Map();
+    this.cache = new SessionCache({ maxEntries: 8 });
   }
 
   async loadArtist(artistId, { market, signal, force = false } = {}) {
-    if (!force && !signal && this.cache.has(artistId)) return this.cache.get(artistId);
+    if (!force && this.cache.has(artistId)) return this.cache.get(artistId);
 
     const [artistPayload, firstPage] = await Promise.all([
       this.apiClient.getArtist(artistId, { signal }),
@@ -122,7 +123,7 @@ export class SpotifyArtistService {
       compilations: releases.filter((release) => release.type === "compilation"),
       total: releases.length,
     };
-    if (!signal) this.cache.set(artist.id, result);
+    this.cache.set(artist.id, result);
     return result;
   }
 }

@@ -12,16 +12,26 @@ const EMPTY_MESSAGES = {
 
 let queueCleanup;
 
-export function setupQueue({ onPlay } = {}) {
+export function setupQueue({ onPlay, onAddToPlaylist } = {}) {
   queueCleanup?.();
   const { queueList } = getElements();
   if (!queueList) return () => {};
   const handleClick = (event) => {
-    const row = event.target.closest('[data-play-uri]');
-    if (!row || row.disabled) return;
+    const add = event.target.closest('[data-queue-add-playlist]');
+    if (add && !add.disabled) {
+      event.stopPropagation();
+      return onAddToPlaylist?.({
+        id: add.dataset.queueTrackId || null,
+        localId: add.dataset.queueLocalId || null,
+        uri: add.dataset.queueAddPlaylist,
+        title: add.dataset.queueTrackTitle || 'Song',
+      });
+    }
+    const play = event.target.closest('[data-queue-play]');
+    if (!play || play.disabled) return;
     onPlay?.({
-      uri: row.dataset.playUri,
-      index: Number(row.dataset.queueIndex),
+      uri: play.dataset.queuePlay,
+      index: Number(play.dataset.queueIndex),
     });
   };
   queueList.addEventListener('click', handleClick);
@@ -33,7 +43,7 @@ export function setupQueue({ onPlay } = {}) {
 }
 
 export function renderQueue(queueState = {}) {
-  const { queueList, queueClear } = getElements();
+  const { queueList } = getElements();
   if (!queueList) return;
 
   const current = queueState.currentItem || queueState.current || queueState.nowPlaying || null;
@@ -46,34 +56,22 @@ export function renderQueue(queueState = {}) {
   const fragment = document.createDocumentFragment();
 
   queueList.setAttribute('aria-busy', String(status === 'loading'));
-
   if (current) {
     fragment.append(sectionLabel('Now playing'));
-    fragment.append(createQueueRow(current, { playing: true, removable: false }));
+    fragment.append(createQueueRow(current, { playing: true }));
   }
-
   if (items.length) {
     fragment.append(sectionLabel('Up next'));
-    items.forEach((item, index) => fragment.append(createQueueRow(item, {
-      removable: true,
-      queueIndex: index,
-    })));
+    items.forEach((item, index) => fragment.append(createQueueRow(item, { queueIndex: index })));
   }
 
   queueList.replaceChildren();
-  if (fragment.childNodes.length) {
-    queueList.append(fragment);
-  } else {
+  if (fragment.childNodes.length) queueList.append(fragment);
+  else {
     const empty = document.createElement('div');
     empty.className = 'empty';
     empty.textContent = queueState.message || EMPTY_MESSAGES[status] || EMPTY_MESSAGES.empty;
     queueList.append(empty);
-  }
-
-  if (queueClear) {
-    const unavailable = !items.length;
-    queueClear.classList.toggle('is-muted', unavailable);
-    queueClear.setAttribute('aria-disabled', 'true');
   }
 }
 
@@ -89,8 +87,9 @@ export function setQueueVisible(visible) {
 }
 
 export function createQueueRow(item, options = {}) {
-  const unavailableReason = options.playing ? null : directPlaybackBlockReason(item);
-  const row = document.createElement(options.playing ? 'div' : 'button');
+  const local = Boolean(item?.isLocal || String(item?.uri || '').startsWith('spool:local:'));
+  const unavailableReason = options.playing || local ? null : directPlaybackBlockReason(item);
+  const row = document.createElement('div');
   const type = item.contentType || item.type || 'track';
   const title = item.title || item.name || (type === 'episode' ? 'Untitled episode' : 'Untitled track');
   const subtitle = artistText(item) || item.albumName || item.album?.name || (type === 'episode' ? 'Podcast episode' : 'Unknown artist');
@@ -99,28 +98,17 @@ export function createQueueRow(item, options = {}) {
   const titleElement = document.createElement('div');
   const subtitleElement = document.createElement('div');
 
-  row.className = `row${options.playing ? ' playing' : ''}`;
-  if (!options.playing) {
-    row.type = 'button';
-    row.classList.add('queue-track');
-    row.disabled = Boolean(unavailableReason);
-    row.title = unavailableReason || `Play ${title} now`;
-    row.setAttribute('aria-label', unavailableReason || `Play ${title} now`);
-    if (!unavailableReason) {
-      row.dataset.playUri = item.uri;
-      row.dataset.queueIndex = String(options.queueIndex ?? 0);
-    }
-  }
+  row.className = `row queue-row${options.playing ? ' playing' : ''}${local ? ' local-overlay-row' : ''}`;
   row.dataset.itemType = type;
   if (item.uri) row.dataset.uri = item.uri;
-  row.draggable = false;
+
+  if (!options.playing) row.append(playButton(item, options.queueIndex, unavailableReason));
 
   image.className = 'row-thumb';
   image.src = artworkUrl(item) || DEFAULT_COVER;
   image.alt = '';
   image.loading = 'lazy';
   image.draggable = false;
-
   info.className = 'row-info';
   titleElement.className = 'row-title';
   titleElement.textContent = title;
@@ -129,9 +117,38 @@ export function createQueueRow(item, options = {}) {
   info.append(titleElement, subtitleElement);
   row.append(image, info);
 
-  if (!options.playing && !unavailableReason) row.append(playNowIcon());
+  if (/^(?:spotify:track|spool:local):/u.test(item.uri || '')) row.append(queueAddButton(item));
   if (options.playing) row.append(equalizerBars());
   return row;
+}
+
+function playButton(item, queueIndex, unavailableReason) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'mini-btn row-play-now';
+  button.disabled = Boolean(unavailableReason);
+  button.title = unavailableReason || `Play ${item.title || item.name || 'song'} now`;
+  button.setAttribute('aria-label', button.title);
+  if (!unavailableReason) {
+    button.dataset.queuePlay = item.uri || '';
+    button.dataset.queueIndex = String(queueIndex ?? 0);
+  }
+  button.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>';
+  return button;
+}
+
+function queueAddButton(item) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'mini-btn queue-add-playlist';
+  button.dataset.queueAddPlaylist = item.uri;
+  button.dataset.queueTrackId = item.id || item.itemId || item.localId || '';
+  button.dataset.queueLocalId = item.localId || '';
+  button.dataset.queueTrackTitle = item.title || item.name || 'Song';
+  button.title = 'Add to playlist';
+  button.setAttribute('aria-label', `Add ${button.dataset.queueTrackTitle} to playlist`);
+  button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>';
+  return button;
 }
 
 function sectionLabel(text) {
@@ -139,14 +156,6 @@ function sectionLabel(text) {
   label.className = 'q-sec';
   label.textContent = text;
   return label;
-}
-
-function playNowIcon() {
-  const icon = document.createElement('span');
-  icon.className = 'row-play-now';
-  icon.setAttribute('aria-hidden', 'true');
-  icon.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>';
-  return icon;
 }
 
 function equalizerBars() {

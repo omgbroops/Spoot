@@ -7,7 +7,11 @@ export const REQUIRED_SPOTIFY_SCOPES = Object.freeze([
   "user-modify-playback-state",
   "playlist-read-private",
   "playlist-read-collaborative",
+  "playlist-modify-private",
+  "playlist-modify-public",
   "user-library-read",
+  "user-library-modify",
+  "ugc-image-upload",
 ]);
 
 const PLACEHOLDER_CLIENT_IDS = new Set([

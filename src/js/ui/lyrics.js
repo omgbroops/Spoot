@@ -9,30 +9,36 @@ let activeIndex = -1;
 let manualScrollUntil = 0;
 let cleanup;
 let seekHandler;
+let editHandler;
 
-export function setupLyrics({ onSeek } = {}) {
+export function setupLyrics({ onSeek, onEdit } = {}) {
   cleanup?.();
   seekHandler = onSeek;
+  editHandler = onEdit;
   const { lyricsList, immersiveLyrics } = getElements();
   const boxes = [lyricsList, immersiveLyrics].filter(Boolean);
   const removers = boxes.flatMap((box) => {
-    const pauseFollow = () => {
-      manualScrollUntil = Date.now() + MANUAL_SCROLL_PAUSE_MS;
-    };
+    const pauseFollow = () => { manualScrollUntil = Date.now() + MANUAL_SCROLL_PAUSE_MS; };
     const updateMask = () => updateLyricsMask(box);
+    const onClick = (event) => {
+      if (event.target.closest("[data-lyrics-edit]")) editHandler?.();
+    };
     box.addEventListener("wheel", pauseFollow, { passive: true });
     box.addEventListener("touchmove", pauseFollow, { passive: true });
     box.addEventListener("scroll", updateMask, { passive: true });
+    box.addEventListener("click", onClick);
     return [
       () => box.removeEventListener("wheel", pauseFollow),
       () => box.removeEventListener("touchmove", pauseFollow),
       () => box.removeEventListener("scroll", updateMask),
+      () => box.removeEventListener("click", onClick),
     ];
   });
   cleanup = () => {
     removers.forEach((remove) => remove());
     cleanup = undefined;
     seekHandler = undefined;
+    editHandler = undefined;
   };
   return cleanup;
 }
@@ -52,15 +58,21 @@ export function renderLyrics({ status = "empty", lyrics = null, track = null, me
       box.classList.add("is-loading");
       appendEmpty(box, `Finding lyrics for ${track?.title || "this track"}…`);
     } else if (lyrics?.instrumental) {
-      appendEmpty(box, "This track is instrumental.");
+      appendEmpty(box, "This track is instrumental.", true);
     } else if (lyrics?.lines?.length) {
       if (lyrics.synced) renderSyncedLyrics(box, lyrics.lines);
       else renderStaticLyrics(box, lyrics.lines);
     } else {
-      appendEmpty(box, message || emptyMessage(status));
+      appendEmpty(box, message || emptyMessage(status), Boolean(track && status !== "disconnected" && status !== "episode"));
     }
     updateLyricsMask(box);
   });
+
+  const editButton = document.getElementById("lyrics-edit");
+  if (editButton) {
+    editButton.textContent = lyrics?.lines?.length || lyrics?.instrumental ? "Edit" : "Add";
+    editButton.disabled = !track || status === "loading" || status === "episode";
+  }
 }
 
 export function updateLyricsPosition(positionMs, { instant = false } = {}) {
@@ -70,11 +82,8 @@ export function updateLyricsPosition(positionMs, { instant = false } = {}) {
 
   let nextIndex = -1;
   for (let index = 0; index < lines.length; index += 1) {
-    if ((Number(lines[index].startMs) || 0) <= currentPositionMs + ACTIVE_LINE_LEAD_MS) {
-      nextIndex = index;
-    } else {
-      break;
-    }
+    if ((Number(lines[index].startMs) || 0) <= currentPositionMs + ACTIVE_LINE_LEAD_MS) nextIndex = index;
+    else break;
   }
   if (nextIndex === activeIndex && !instant) return activeIndex;
   activeIndex = nextIndex;
@@ -95,9 +104,7 @@ export function updateLyricsPosition(positionMs, { instant = false } = {}) {
   return activeIndex;
 }
 
-export function getActiveLyricsIndex() {
-  return activeIndex;
-}
+export function getActiveLyricsIndex() { return activeIndex; }
 
 function renderSyncedLyrics(box, lines) {
   const fragment = document.createDocumentFragment();
@@ -127,17 +134,27 @@ function renderStaticLyrics(box, lines) {
   box.append(plain);
 }
 
-function appendEmpty(box, message) {
+function appendEmpty(box, message, editable = false) {
   const empty = document.createElement("div");
   empty.className = "lyr-empty";
-  empty.textContent = message;
+  const text = document.createElement("p");
+  text.textContent = message;
+  empty.append(text);
+  if (editable && box.id === "lyrics-list") {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn lyr-add-button";
+    button.dataset.lyricsEdit = "";
+    button.textContent = "Add lyrics";
+    empty.append(button);
+  }
   box.append(empty);
 }
 
 function emptyMessage(status) {
   if (status === "episode") return "Lyrics are available for songs.";
   if (status === "error") return "Lyrics are unavailable right now.";
-  if (status === "disconnected") return "Connect Spotify to load lyrics.";
+  if (status === "disconnected") return "Connect Spotify or play a local song to load lyrics.";
   if (status === "empty") return "Nothing playing.";
   return "No lyrics found for this track.";
 }

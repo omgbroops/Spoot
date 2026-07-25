@@ -60,7 +60,7 @@ test("lyrics service uses a direct CORS-simple LRCLIB request", async () => {
   assert.doesNotMatch(requests.map((request) => request.url).join("\n"), /spicylyrics|color-lyrics/u);
 });
 
-test("LRCLIB uses broad and field searches and does not cache transient empty results", async () => {
+test("LRCLIB uses broad and field searches and persistently caches one automatic no-match result", async () => {
   const requests = [];
   const service = new LyricsService({
     fetchImpl: async (url) => {
@@ -81,7 +81,58 @@ test("LRCLIB uses broad and field searches and does not cache transient empty re
 
   assert.equal((await service.getLyrics(track)).detail, "not-found");
   assert.equal((await service.getLyrics(track)).detail, "not-found");
-  assert.equal(requests.length, 6);
+  assert.equal(requests.length, 3);
   assert.ok(requests.some((url) => url.searchParams.has("q")));
   assert.ok(requests.some((url) => url.searchParams.has("track_name")));
+});
+
+test("manual lyrics persistently outrank embedded and automatic LRCLIB lyrics", async () => {
+  const { LyricsStore } = await import("../src/js/lyrics/lyrics-store.js");
+  const store = new LyricsStore({ indexedDBImpl: null });
+  let fetchCount = 0;
+  const fetchImpl = async () => {
+    fetchCount += 1;
+    return jsonResponse({ syncedLyrics: "[00:01.00]Provider line" });
+  };
+  const track = {
+    id: "local-priority",
+    uri: "spool:local:local-priority",
+    title: "Priority",
+    artist: "Spool",
+    isLocal: true,
+    lyrics: "[00:00.50]Embedded line",
+  };
+
+  const first = new LyricsService({ store, fetchImpl });
+  assert.equal((await first.getLyrics(track)).source, "embedded");
+  assert.equal(fetchCount, 0);
+  await first.save(track, "[00:02.00]My edited line", { source: "manual", userModified: true });
+
+  const restored = new LyricsService({ store, fetchImpl });
+  const lyrics = await restored.getLyrics({ ...track, lyrics: "[00:00.50]Different embedded line" });
+  assert.equal(lyrics.source, "manual");
+  assert.equal(lyrics.lines.find((line) => line.text)?.text, "My edited line");
+  assert.equal(fetchCount, 0);
+});
+
+test("embedded local lyrics replace an automatic LRCLIB cache but never a manual edit", async () => {
+  const { LyricsStore } = await import("../src/js/lyrics/lyrics-store.js");
+  const store = new LyricsStore({ indexedDBImpl: null });
+  const track = { id: "local-late-embed", uri: "spool:local:local-late-embed", title: "Late embed", artist: "Spool", isLocal: true };
+  await store.put({
+    key: "local:local-late-embed",
+    text: "[00:01.00]Cached provider",
+    source: "lrclib",
+    autoFetchAttempted: true,
+  });
+  const service = new LyricsService({ store, fetchImpl: async () => jsonResponse([]) });
+  const embedded = await service.getLyrics({ ...track, lyrics: "[00:02.00]Embedded wins" });
+  assert.equal(embedded.source, "embedded");
+  assert.equal(embedded.lines.find((line) => line.text)?.text, "Embedded wins");
+
+  await service.save(track, "[00:03.00]Manual wins", { source: "manual", userModified: true });
+  const restored = new LyricsService({ store, fetchImpl: async () => jsonResponse([]) });
+  const manual = await restored.getLyrics({ ...track, lyrics: "[00:04.00]New embedded" });
+  assert.equal(manual.source, "manual");
+  assert.equal(manual.lines.find((line) => line.text)?.text, "Manual wins");
 });

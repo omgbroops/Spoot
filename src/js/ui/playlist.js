@@ -1,6 +1,71 @@
 import { formatCollectionDuration, formatTrackDuration } from "./library.js";
 import { DEFAULT_COVER, artistText, artworkUrl } from "./now-playing.js";
 
+let interactionCleanup;
+let interactionHandlers = {};
+let dragIndex = null;
+
+export function setupPlaylistInteractions(handlers = {}) {
+  interactionCleanup?.();
+  interactionHandlers = { ...handlers };
+  const root = document.getElementById("search-results");
+  if (!root) return () => {};
+  const click = (event) => {
+    const edit = event.target.closest("[data-playlist-edit]");
+    if (edit) return interactionHandlers.onEdit?.(edit.dataset.playlistEdit);
+    const remove = event.target.closest("[data-playlist-remove-index]");
+    if (remove) return interactionHandlers.onRemove?.({
+      playlistId: remove.dataset.playlistId,
+      index: Number(remove.dataset.playlistRemoveIndex),
+    });
+  };
+  const dragstart = (event) => {
+    const row = event.target.closest("[data-playlist-drag-index]");
+    if (!row) return;
+    dragIndex = Number(row.dataset.playlistDragIndex);
+    row.classList.add("dragging-row");
+    event.dataTransfer?.setData("text/plain", String(dragIndex));
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+  };
+  const dragover = (event) => {
+    if (dragIndex === null) return;
+    const row = event.target.closest("[data-playlist-drag-index]");
+    if (!row) return;
+    event.preventDefault();
+    row.classList.add("drag-over");
+  };
+  const dragleave = (event) => event.target.closest("[data-playlist-drag-index]")?.classList.remove("drag-over");
+  const drop = (event) => {
+    const row = event.target.closest("[data-playlist-drag-index]");
+    if (!row || dragIndex === null) return;
+    event.preventDefault();
+    const toIndex = Number(row.dataset.playlistDragIndex);
+    const playlistId = row.dataset.playlistId;
+    document.querySelectorAll(".playlist-track.drag-over").forEach((entry) => entry.classList.remove("drag-over"));
+    interactionHandlers.onReorder?.({ playlistId, fromIndex: dragIndex, toIndex });
+    dragIndex = null;
+  };
+  const dragend = () => {
+    dragIndex = null;
+    root.querySelectorAll(".dragging-row,.drag-over").forEach((row) => row.classList.remove("dragging-row", "drag-over"));
+  };
+  root.addEventListener("click", click);
+  root.addEventListener("dragstart", dragstart);
+  root.addEventListener("dragover", dragover);
+  root.addEventListener("dragleave", dragleave);
+  root.addEventListener("drop", drop);
+  root.addEventListener("dragend", dragend);
+  interactionCleanup = () => {
+    root.removeEventListener("click", click);
+    root.removeEventListener("dragstart", dragstart);
+    root.removeEventListener("dragover", dragover);
+    root.removeEventListener("dragleave", dragleave);
+    root.removeEventListener("drop", drop);
+    root.removeEventListener("dragend", dragend);
+  };
+  return interactionCleanup;
+}
+
 export function renderPlaylist({
   container = document.getElementById("playlist-content"),
   status = "idle",
@@ -53,20 +118,32 @@ function playlistHeader(playlist, loadedCount, durationMs) {
   description.className = "playlist-description";
   description.textContent = stripHtml(playlist.description);
   meta.className = "playlist-meta";
-  meta.textContent = [
-    playlist.ownerName,
-    Number.isFinite(playlist.total) ? `${playlist.total} song${playlist.total === 1 ? "" : "s"}` : `${loadedCount} songs`,
-    durationMs ? formatCollectionDuration(durationMs) : null,
-  ].filter(Boolean).join(" · ");
+  meta.textContent = [playlist.ownerName, Number.isFinite(playlist.total) ? `${playlist.total} song${playlist.total === 1 ? "" : "s"}` : `${loadedCount} songs`, durationMs ? formatCollectionDuration(durationMs) : null].filter(Boolean).join(" · ");
   actions.className = "playlist-actions";
   play.className = "btn primary";
   play.type = "button";
   play.dataset.playlistPlay = "";
   play.dataset.playlistContext = playlist.uri || "";
   play.dataset.playlistContextOnly = "true";
+  play.dataset.playlistHybridId = playlist.id || "";
+  play.dataset.playlistHybridPosition = "0";
   play.disabled = !playlist.uri;
   play.textContent = "Play playlist";
   actions.append(play);
+  if (playlist.owned) {
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "btn";
+    edit.dataset.playlistEdit = playlist.id;
+    edit.textContent = "Edit details";
+    actions.append(edit);
+  }
+  const refresh = document.createElement("button");
+  refresh.type = "button";
+  refresh.className = "btn";
+  refresh.dataset.catalogRefresh = "";
+  refresh.textContent = "Refresh";
+  actions.append(refresh);
   if (playlist.externalUrl) actions.append(externalLink(playlist.externalUrl));
   copy.append(kind, title);
   if (description.textContent) copy.append(description);
@@ -83,9 +160,13 @@ function playlistTrackRow(entry, playlist, index, currentUri) {
   const artists = document.createElement("span");
   const album = document.createElement("button");
   const duration = document.createElement("span");
+  const actions = document.createElement("span");
   const playable = Boolean(entry.playable && entry.uri);
-  row.className = `library-track${playable ? "" : " unavailable"}${currentUri && entry.uri === currentUri ? " playing" : ""}`;
+  row.className = `library-track playlist-track${playable ? "" : " unavailable"}${currentUri && entry.uri === currentUri ? " playing" : ""}`;
   row.title = entry.unavailableReason || `Play ${entry.title}`;
+  row.dataset.playlistId = playlist.id || "";
+  row.dataset.playlistDragIndex = String(index);
+  row.draggable = Boolean(playlist.canModifyItems);
   image.src = artworkUrl(entry.item || entry) || DEFAULT_COVER;
   image.alt = "";
   image.loading = "lazy";
@@ -97,7 +178,9 @@ function playlistTrackRow(entry, playlist, index, currentUri) {
   if (playable) {
     title.dataset.playlistPlay = entry.uri;
     title.dataset.playlistContext = playlist.uri || "";
-    title.dataset.playlistPosition = String(index);
+    title.dataset.playlistPosition = String(Number.isInteger(entry.spotifyPosition) ? entry.spotifyPosition : index);
+    title.dataset.playlistHybridId = playlist.id || "";
+    title.dataset.playlistHybridPosition = String(index);
   }
   title.textContent = entry.title || "Unavailable item";
   artists.className = "catalog-link-row";
@@ -113,7 +196,29 @@ function playlistTrackRow(entry, playlist, index, currentUri) {
   }
   duration.className = "library-track-duration";
   duration.textContent = formatTrackDuration(entry.durationMs);
-  row.append(image, copy, album, duration);
+  actions.className = "library-track-actions";
+  if (/^(?:spotify:track|spool:local):/u.test(entry.uri || "")) {
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "track-action-button";
+    add.dataset.catalogAddPlaylist = entry.uri;
+    add.dataset.catalogTrackId = entry.id || entry.localId || entry.item?.id || "";
+    add.dataset.catalogTrackTitle = entry.title || "Song";
+    add.title = "Add to playlist";
+    add.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>';
+    actions.append(add);
+  }
+  if (playlist.canModifyItems) {
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "track-action-button";
+    remove.dataset.playlistRemoveIndex = String(index);
+    remove.dataset.playlistId = playlist.id || "";
+    remove.title = "Remove from playlist";
+    remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+    actions.append(remove);
+  }
+  row.append(image, copy, album, duration, actions);
   if (!playable) {
     const reason = document.createElement("span");
     reason.className = "library-item-state";

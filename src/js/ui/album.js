@@ -3,12 +3,14 @@ import { DEFAULT_COVER, artistText } from "./now-playing.js";
 
 let cleanup;
 
-export function setupAlbum({ onPlay, onOpenArtist, onBack } = {}) {
+export function setupAlbum({ onPlay, onOpenArtist, onAddToPlaylist, onBack } = {}) {
   cleanup?.();
   const content = document.getElementById("album-content");
   const back = document.getElementById("album-back");
   if (!content) return () => {};
   const click = (event) => {
+    const add = event.target.closest("[data-catalog-add-playlist]");
+    if (add && !add.disabled) return onAddToPlaylist?.({ id: add.dataset.catalogTrackId || null, uri: add.dataset.catalogAddPlaylist, title: add.dataset.catalogTrackTitle || "Song" });
     const artist = event.target.closest("[data-album-open-artist]");
     if (artist && !artist.disabled) return onOpenArtist?.({ id: artist.dataset.albumOpenArtist });
     const play = event.target.closest("[data-album-play]");
@@ -123,7 +125,7 @@ function trackHeader() {
   const header = document.createElement("div");
   header.className = "album-track-head";
   header.setAttribute("aria-hidden", "true");
-  ["#", "Title", "Time"].forEach((label) => {
+  ["#", "Title", "Time", ""].forEach((label) => {
     const cell = document.createElement("span");
     cell.textContent = label;
     header.append(cell);
@@ -138,6 +140,7 @@ function albumTrackRow(track, album, currentUri) {
   const title = document.createElement("button");
   const artists = document.createElement("span");
   const duration = document.createElement("span");
+  const actions = document.createElement("span");
   row.className = `album-track${track.playable ? "" : " unavailable"}${currentUri && track.uri === currentUri ? " playing" : ""}`;
   row.title = track.unavailableReason || `Play ${track.title}`;
   number.className = "album-track-number";
@@ -157,8 +160,23 @@ function albumTrackRow(track, album, currentUri) {
   copy.append(title, artists);
   duration.className = "album-track-duration";
   duration.textContent = formatTrackDuration(track.durationMs);
-  row.append(number, copy, duration);
+  actions.className = "album-track-actions";
+  if (/^spotify:track:/u.test(track.uri || "")) actions.append(addToPlaylistButton(track));
+  row.append(number, copy, duration, actions);
   return row;
+}
+
+function addToPlaylistButton(track) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "track-action-button";
+  button.dataset.catalogAddPlaylist = track.uri;
+  button.dataset.catalogTrackId = track.id || "";
+  button.dataset.catalogTrackTitle = track.title || "Song";
+  button.title = "Add to playlist";
+  button.setAttribute("aria-label", `Add ${track.title || "song"} to playlist`);
+  button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>';
+  return button;
 }
 
 function appendArtistLinks(container, artists, fallback) {

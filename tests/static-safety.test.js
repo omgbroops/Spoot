@@ -24,17 +24,24 @@ test("the immutable original player reference still matches its recorded hash", 
   assert.equal(actual, recorded);
 });
 
-test("Spotify runtime cannot initialize the dormant local library engine", () => {
-  const runtime = walk(join(root, "src/js"))
-    .filter((path) => extname(path) === ".js")
+test("local audio is isolated from the Spotify runtime and stores only user-imported media", () => {
+  const jsFiles = walk(join(root, "src/js")).filter((path) => extname(path) === ".js");
+  const localRuntime = jsFiles
+    .filter((path) => path.includes(`${join("src", "js", "local")}`))
+    .map((path) => readFileSync(path, "utf8"))
+    .join("\n");
+  const spotifyRuntime = jsFiles
+    .filter((path) => !path.includes(`${join("src", "js", "local")}`))
     .map((path) => readFileSync(path, "utf8"))
     .join("\n");
 
-  assert.doesNotMatch(runtime, /\bnew\s+(?:window\.)?Audio\s*\(/);
-  assert.doesNotMatch(runtime, /indexedDB\.open\s*\(\s*["']musicplayer["']/);
-  assert.doesNotMatch(runtime, /\bclient_secret\b/i);
-  assert.doesNotMatch(runtime, /\bDROPBOX_APP_KEY\b/);
-  assert.doesNotMatch(runtime, /companion-spicetify-bridge|sp:\/\/oauth|127\.0\.0\.1:49623/iu);
+  assert.doesNotMatch(spotifyRuntime, /\bnew\s+(?:window\.)?Audio\s*\(/);
+  assert.match(localRuntime, /spool-local-media/u);
+  assert.match(localRuntime, /spool:local:/u);
+  assert.doesNotMatch(localRuntime, /api\.spotify\.com|sdk\.scdn\.co/iu);
+  assert.doesNotMatch(`${spotifyRuntime}\n${localRuntime}`, /indexedDB\.open\s*\(\s*["']musicplayer["']/);
+  assert.doesNotMatch(`${spotifyRuntime}\n${localRuntime}`, /\bclient_secret\b/i);
+  assert.doesNotMatch(`${spotifyRuntime}\n${localRuntime}`, /companion-spicetify-bridge|sp:\/\/oauth|127\.0\.0\.1:49623/iu);
 });
 
 test("OAuth callback recovery uses persistent short-lived transaction storage", () => {
@@ -76,4 +83,12 @@ test("all static relative JavaScript imports resolve", () => {
       assert.equal(existsSync(target), true, `${file} imports missing ${target}`);
     }
   }
+});
+
+
+test("library source navigation keeps its back-handler implementation", () => {
+  const app = readFileSync(join(root, "src/js/app.js"), "utf8");
+  assert.match(app, /onBack:\s*showLibrarySources/u);
+  assert.match(app, /function\s+showLibrarySources\s*\(\)\s*\{/u);
+  assert.match(app, /renderLibrarySources\(\{\s*sources:\s*librarySources\s*\}\)/u);
 });

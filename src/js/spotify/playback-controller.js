@@ -18,6 +18,7 @@ export class PlaybackController extends Emitter {
   #clock;
   #setInterval;
   #clearInterval;
+  #sleep;
   #progressTimer = null;
   #unbindSdk = [];
   #lifecycleGeneration = 0;
@@ -32,6 +33,7 @@ export class PlaybackController extends Emitter {
     clock = Date,
     setIntervalImpl = globalThis.setInterval,
     clearIntervalImpl = globalThis.clearInterval,
+    sleepImpl = (milliseconds) => new Promise((resolve) => globalThis.setTimeout(resolve, milliseconds)),
   } = {}) {
     super();
     if (!apiClient) throw new TypeError("PlaybackController requires an API client.");
@@ -44,6 +46,7 @@ export class PlaybackController extends Emitter {
     this.#clock = clock;
     this.#setInterval = setIntervalImpl;
     this.#clearInterval = clearIntervalImpl;
+    this.#sleep = sleepImpl;
 
     this.connectionState = "logged-in";
     this.deviceId = null;
@@ -233,34 +236,25 @@ export class PlaybackController extends Emitter {
     if (queueIndex >= queueSnapshot.length) {
       throw new RangeError("That Spotify queue entry is no longer available.");
     }
-    if (uri && queueSnapshot[queueIndex]?.uri !== uri) {
-      throw new RangeError("The Spotify queue changed before that item was selected.");
-    }
 
-    // Do not recreate the visible tail as a new URI-list context. Spotify's
-    // queue can contain an open-ended autoplay/recommendation continuation;
-    // replacing it with a finite list destroys that context and its previous
-    // history. Advance through the real queue instead so Spotify remains the
-    // owner of both the prior items and any recommendations it appends later.
+    // Spotify exposes only a one-step next command. Preserve its open-ended
+    // autoplay context by advancing the real queue instead of rebuilding the
+    // visible tail as a finite URI list. Wait for each actual track transition
+    // before issuing the next command so rapid SDK calls are not coalesced.
     const steps = queueIndex + 1;
     if (steps > 1) {
-      this.emit("notice", { message: `Jumping forward ${steps} songs without replacing Spotify's queue…` });
+      this.emit("notice", {
+        message: `Jumping forward ${steps} songs without replacing Spotify's queue…`,
+      });
     }
     try {
       for (let step = 0; step < steps; step += 1) {
-        if (this.#sdk.ready) await this.#sdk.next();
-        else await this.#api.skipNext({ deviceId: this.deviceId });
+        await this.#advanceQueueOneStep();
       }
-      const [state] = await Promise.all([
+      await Promise.all([
         this.refreshState({ fresh: true }),
         this.refreshQueue().catch(() => this.queue),
       ]);
-      const expectedUri = queueSnapshot[queueIndex]?.uri || uri || null;
-      if (expectedUri && state?.itemUri && state.itemUri !== expectedUri) {
-        this.emit("notice", {
-          message: "Spotify's queue changed while Spool was jumping forward. The current Spotify queue was preserved.",
-        });
-      }
       return true;
     } catch (error) {
       this.#emitCommandError("Spotify could not jump to that queue item.", error);
@@ -483,6 +477,51 @@ export class PlaybackController extends Emitter {
     this.#unbindSdk = [];
     this.#sdk.disconnect?.();
     this.clear();
+  }
+
+  async #advanceQueueOneStep() {
+    const previousUri = this.playbackState?.itemUri || null;
+    const transition = this.#waitForItemChange(previousUri, 1_800);
+
+    if (this.#sdk.ready) {
+      await this.#sdk.next();
+    } else {
+      await this.#api.skipNext({ deviceId: this.deviceId });
+      // API-only playback has no local SDK event, so reconcile it explicitly.
+      await this.#sleep(320);
+      await this.refreshState({ fresh: true }).catch(() => this.playbackState);
+    }
+
+    const changed = await transition;
+    if (!changed) {
+      // A backgrounded tab can miss/delay SDK events. A fresh state read keeps
+      // the repeated skip sequence moving without rejecting because the queue
+      // itself grew or changed while Spotify generated more recommendations.
+      await this.refreshState({ fresh: true }).catch(() => this.playbackState);
+    }
+  }
+
+  #waitForItemChange(previousUri, timeoutMs) {
+    if (!previousUri) return this.#sleep(Math.min(timeoutMs, 450)).then(() => true);
+
+    let settled = false;
+    let unbind = () => {};
+    const stateChanged = new Promise((resolve) => {
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        unbind();
+        resolve(value);
+      };
+      unbind = this.on("state", (state) => {
+        if (state?.itemUri && state.itemUri !== previousUri) finish(true);
+      });
+    });
+    const timedOut = this.#sleep(timeoutMs).then(() => false);
+    return Promise.race([stateChanged, timedOut]).finally(() => {
+      settled = true;
+      unbind();
+    });
   }
 
   async #transportCommand({ action, sdkCommand, apiCommand, errorMessage }) {

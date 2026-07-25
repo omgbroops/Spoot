@@ -163,6 +163,20 @@ function assertSpotifyId(id, label = "Spotify item") {
   return id;
 }
 
+function assertSpotifyIds(ids, label, maximum) {
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > maximum) {
+    throw new RangeError(`${label} IDs must contain between 1 and ${maximum} items.`);
+  }
+  return ids.map((id) => assertSpotifyId(id, label));
+}
+
+function assertSpotifyUris(uris, allowedTypes, maximum) {
+  if (!Array.isArray(uris) || uris.length < 1 || uris.length > maximum) {
+    throw new RangeError(`Spotify URIs must contain between 1 and ${maximum} items.`);
+  }
+  return uris.map((uri) => assertSpotifyUri(uri, allowedTypes));
+}
+
 export class SpotifyApiError extends Error {
   constructor(
     message,
@@ -383,6 +397,155 @@ export class SpotifyApiClient {
   getSavedTracks({ limit = 50, offset = 0, market, signal } = {}) {
     return this.request("me/tracks", {
       query: { limit, offset, market },
+      signal,
+    });
+  }
+
+  saveLibraryItems(uris, { signal } = {}) {
+    const normalizedUris = assertSpotifyUris(uris, ["track"], 40);
+    return this.request("me/library", {
+      method: "PUT",
+      query: { uris: normalizedUris },
+      signal,
+    });
+  }
+
+  removeLibraryItems(uris, { signal } = {}) {
+    const normalizedUris = assertSpotifyUris(uris, ["track"], 40);
+    return this.request("me/library", {
+      method: "DELETE",
+      query: { uris: normalizedUris },
+      signal,
+    });
+  }
+
+  checkLibraryContains(uris, { signal } = {}) {
+    const normalizedUris = assertSpotifyUris(uris, ["track"], 40);
+    return this.request("me/library/contains", {
+      query: { uris: normalizedUris },
+      signal,
+    });
+  }
+
+  // Compatibility wrappers keep the rest of Spool track-oriented while using
+  // Spotify's current generic library endpoints under the hood.
+  saveTracks(trackIds, { signal } = {}) {
+    const ids = assertSpotifyIds(trackIds, "Track", 40);
+    return this.saveLibraryItems(ids.map((id) => `spotify:track:${id}`), { signal });
+  }
+
+  removeSavedTracks(trackIds, { signal } = {}) {
+    const ids = assertSpotifyIds(trackIds, "Track", 40);
+    return this.removeLibraryItems(ids.map((id) => `spotify:track:${id}`), { signal });
+  }
+
+  checkSavedTracks(trackIds, { signal } = {}) {
+    const ids = assertSpotifyIds(trackIds, "Track", 40);
+    return this.checkLibraryContains(ids.map((id) => `spotify:track:${id}`), { signal });
+  }
+
+  createPlaylist({ name, public: isPublic = false, collaborative = false, description = "", signal } = {}) {
+    const normalizedName = String(name || "").trim();
+    if (!normalizedName) throw new TypeError("A playlist name is required.");
+    return this.request("me/playlists", {
+      method: "POST",
+      body: {
+        name: normalizedName,
+        public: Boolean(isPublic),
+        collaborative: Boolean(collaborative),
+        description: String(description || ""),
+      },
+      signal,
+    });
+  }
+
+  changePlaylistDetails(
+    playlistId,
+    { name, description, public: isPublic, collaborative, signal } = {},
+  ) {
+    const body = {};
+    if (name !== undefined) {
+      const normalized = String(name || "").trim();
+      if (!normalized) throw new TypeError("A playlist name cannot be empty.");
+      body.name = normalized;
+    }
+    if (description !== undefined) body.description = String(description || "");
+    if (isPublic !== undefined) body.public = Boolean(isPublic);
+    if (collaborative !== undefined) body.collaborative = Boolean(collaborative);
+    if (!Object.keys(body).length) return Promise.resolve(null);
+    return this.request(`playlists/${assertSpotifyId(playlistId, "Playlist")}`, {
+      method: "PUT",
+      body,
+      signal,
+    });
+  }
+
+  reorderPlaylistItems(
+    playlistId,
+    { rangeStart, insertBefore, rangeLength = 1, snapshotId, signal } = {},
+  ) {
+    if (!Number.isInteger(rangeStart) || rangeStart < 0) {
+      throw new RangeError("Playlist reorder range_start must be non-negative.");
+    }
+    if (!Number.isInteger(insertBefore) || insertBefore < 0) {
+      throw new RangeError("Playlist reorder insert_before must be non-negative.");
+    }
+    if (!Number.isInteger(rangeLength) || rangeLength < 1) {
+      throw new RangeError("Playlist reorder range_length must be positive.");
+    }
+    return this.request(`playlists/${assertSpotifyId(playlistId, "Playlist")}/items`, {
+      method: "PUT",
+      body: {
+        range_start: rangeStart,
+        insert_before: insertBefore,
+        range_length: rangeLength,
+        ...(snapshotId ? { snapshot_id: String(snapshotId) } : {}),
+      },
+      signal,
+    });
+  }
+
+  uploadPlaylistCover(playlistId, base64Jpeg, { signal } = {}) {
+    const payload = String(base64Jpeg || "").replace(/^data:image\/jpeg;base64,/iu, "");
+    if (!payload) throw new TypeError("A Base64 JPEG playlist cover is required.");
+    return this.request(`playlists/${assertSpotifyId(playlistId, "Playlist")}/images`, {
+      method: "PUT",
+      headers: { "Content-Type": "image/jpeg" },
+      body: payload,
+      signal,
+    });
+  }
+
+  addPlaylistItems(playlistId, uris, { position, signal } = {}) {
+    const normalizedUris = assertSpotifyUris(uris, ["track", "episode"], 100);
+    if (position !== undefined && (!Number.isInteger(position) || position < 0)) {
+      throw new RangeError("Playlist insertion position must be a non-negative integer.");
+    }
+    return this.request(`playlists/${assertSpotifyId(playlistId, "Playlist")}/items`, {
+      method: "POST",
+      query: { position },
+      body: { uris: normalizedUris },
+      signal,
+    });
+  }
+
+  removePlaylistItems(playlistId, uris, { snapshotId, positions, signal } = {}) {
+    const normalizedUris = assertSpotifyUris(uris, ["track", "episode"], 100);
+    const normalizedPositions = Array.isArray(positions)
+      ? positions.map((position) => {
+          if (!Number.isInteger(position) || position < 0) throw new RangeError("Playlist item positions must be non-negative integers.");
+          return position;
+        })
+      : null;
+    return this.request(`playlists/${assertSpotifyId(playlistId, "Playlist")}/items`, {
+      method: "DELETE",
+      body: {
+        items: normalizedUris.map((uri, index) => ({
+          uri,
+          ...(normalizedPositions?.[index] !== undefined ? { positions: [normalizedPositions[index]] } : {}),
+        })),
+        ...(snapshotId ? { snapshot_id: String(snapshotId) } : {}),
+      },
       signal,
     });
   }

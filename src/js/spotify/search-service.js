@@ -1,3 +1,4 @@
+import { SessionCache } from "../core/session-cache.js";
 import { normalizePlaybackItem } from "./playback-state.js";
 
 const SEARCH_TYPES = Object.freeze(["track", "album", "artist", "playlist"]);
@@ -110,16 +111,22 @@ export class SpotifySearchService {
   constructor({ apiClient } = {}) {
     if (!apiClient) throw new TypeError("SpotifySearchService requires an API client.");
     this.apiClient = apiClient;
+    this.cache = new SessionCache({ maxEntries: 40 });
   }
 
-  async search(query, { signal } = {}) {
+  async search(query, { signal, force = false } = {}) {
     const normalizedQuery = String(query || "").trim();
     if (!normalizedQuery) return normalizeSearchResponse(null);
+    const cacheKey = normalizedQuery.toLocaleLowerCase();
+    if (!force) {
+      const cached = this.cache.get(cacheKey);
+      if (cached) return cached;
+    }
     const response = await this.apiClient.search(normalizedQuery, {
       types: [...SEARCH_TYPES],
       limit: 10,
       signal,
     });
-    return normalizeSearchResponse(response);
+    return this.cache.set(cacheKey, normalizeSearchResponse(response));
   }
 }

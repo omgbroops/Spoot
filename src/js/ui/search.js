@@ -16,6 +16,8 @@ export function setupSearch({
   onOpenArtist,
   onOpenTrack,
   onOpenPlaylist,
+  onAddToPlaylist,
+  onRefresh,
   onBack,
 } = {}) {
   cleanup?.();
@@ -34,6 +36,12 @@ export function setupSearch({
     onBack?.();
   };
   const click = (event) => {
+    if (event.target.closest("[data-catalog-refresh]")) { onRefresh?.(); return; }
+    const add = event.target.closest("[data-catalog-add-playlist]");
+    if (add && !add.disabled) {
+      onAddToPlaylist?.({ id: add.dataset.catalogTrackId || null, uri: add.dataset.catalogAddPlaylist || null, title: add.dataset.catalogTrackTitle || "Song" });
+      return;
+    }
     const album = event.target.closest("[data-search-open-album], [data-catalog-open-album], [data-album-open]");
     if (album && !album.disabled) {
       onOpenAlbum?.({ id: album.dataset.searchOpenAlbum || album.dataset.catalogOpenAlbum || album.dataset.albumOpen });
@@ -72,6 +80,8 @@ export function setupSearch({
       uri: contextOnly ? null : directUri,
       contextUri,
       contextPosition: parseOptionalInteger(action.dataset.albumPosition || action.dataset.playlistPosition || action.dataset.catalogPosition),
+      hybridPlaylistId: action.dataset.playlistHybridId || null,
+      hybridPosition: parseOptionalInteger(action.dataset.playlistHybridPosition),
       contextOnly,
     });
   };
@@ -106,14 +116,15 @@ export function setSearchChrome({ expanded = false, canGoBack = false, query } =
 }
 
 export function getSearchResultsContainer() {
-  return document.getElementById("search-results");
+  return document.getElementById("search-results-scroll") || document.getElementById("search-results");
 }
 
 export function animateSearchContent(container = getSearchResultsContainer()) {
-  if (!container) return;
-  container.classList.remove("content-enter");
-  void container.offsetWidth;
-  container.classList.add("content-enter");
+  const surface = document.getElementById("search-results") || container;
+  if (!surface) return;
+  surface.classList.remove("content-enter");
+  void surface.offsetWidth;
+  surface.classList.add("content-enter");
 }
 
 export function renderSearch({ status = "idle", query = "", results, message, animate = true } = {}) {

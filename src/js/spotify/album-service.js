@@ -1,3 +1,4 @@
+import { SessionCache } from "../core/session-cache.js";
 import { normalizePlaybackItem } from "./playback-state.js";
 import { directPlaybackBlockReason } from "./playability.js";
 
@@ -78,11 +79,11 @@ export class SpotifyAlbumService {
       throw new TypeError("SpotifyAlbumService requires Spotify album API methods.");
     }
     this.apiClient = apiClient;
-    this.cache = new Map();
+    this.cache = new SessionCache({ maxEntries: 12 });
   }
 
   async loadAlbum(albumId, { market, signal, force = false } = {}) {
-    if (!force && !signal && this.cache.has(albumId)) return this.cache.get(albumId);
+    if (!force && this.cache.has(albumId)) return this.cache.get(albumId);
     const payload = await this.apiClient.getAlbum(albumId, { market, signal });
     const album = normalizeAlbum(payload);
     if (!album?.id || !album.uri) {
@@ -119,7 +120,7 @@ export class SpotifyAlbumService {
       total,
       durationMs: tracks.reduce((sum, track) => sum + (track.durationMs || 0), 0),
     };
-    if (!signal) this.cache.set(album.id, result);
+    this.cache.set(album.id, result);
     return result;
   }
 }
