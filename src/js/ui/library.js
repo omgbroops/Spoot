@@ -279,7 +279,7 @@ function trackRow(entry, source, index, currentUri) {
   const playable = Boolean(entry.playable && entry.uri);
   const local = Boolean(entry.isLocal || String(entry.uri || "").startsWith("spool:local:"));
   const canModify = source.kind === "playlist" && (source.owned || source.collaborative);
-  row.className = `library-track${playable ? "" : " unavailable"}${currentUri && entry.uri === currentUri ? " playing" : ""}${local ? " local-overlay-row" : ""}`;
+  row.className = `library-track${playable ? "" : " unavailable"}${currentUri && entry.uri === currentUri ? " playing" : ""}`;
   row.title = entry.unavailableReason || `Play ${entry.title}`;
   image.className = "library-track-cover";
   image.src = artworkUrl(entry.item || entry) || entry.artworkUrl || DEFAULT_COVER;
@@ -326,7 +326,7 @@ function trackRow(entry, source, index, currentUri) {
     const remove = actionButton("Delete local file", removeIcon());
     remove.dataset.libraryDeleteLocal = entry.localId || entry.id;
     actions.append(remove);
-  } else if ((canModify || (source.kind === "liked" && local))) {
+  } else if (canModify || source.kind === "liked") {
     const remove = actionButton("Remove from playlist", removeIcon());
     remove.dataset.libraryRemoveIndex = String(index);
     remove.dataset.librarySourceId = source.id;

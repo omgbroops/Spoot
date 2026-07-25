@@ -16,6 +16,7 @@ export function setupLyrics({ onSeek, onEdit } = {}) {
   seekHandler = onSeek;
   editHandler = onEdit;
   const { lyricsList, immersiveLyrics } = getElements();
+  const editButton = document.getElementById("lyrics-edit");
   const boxes = [lyricsList, immersiveLyrics].filter(Boolean);
   const removers = boxes.flatMap((box) => {
     const pauseFollow = () => { manualScrollUntil = Date.now() + MANUAL_SCROLL_PAUSE_MS; };
@@ -34,6 +35,9 @@ export function setupLyrics({ onSeek, onEdit } = {}) {
       () => box.removeEventListener("click", onClick),
     ];
   });
+  const onEditClick = () => editHandler?.();
+  editButton?.addEventListener("click", onEditClick);
+  removers.push(() => editButton?.removeEventListener("click", onEditClick));
   cleanup = () => {
     removers.forEach((remove) => remove());
     cleanup = undefined;

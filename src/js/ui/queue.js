@@ -98,11 +98,9 @@ export function createQueueRow(item, options = {}) {
   const titleElement = document.createElement('div');
   const subtitleElement = document.createElement('div');
 
-  row.className = `row queue-row${options.playing ? ' playing' : ''}${local ? ' local-overlay-row' : ''}`;
+  row.className = `row queue-row${options.playing ? ' playing' : ''}`;
   row.dataset.itemType = type;
   if (item.uri) row.dataset.uri = item.uri;
-
-  if (!options.playing) row.append(playButton(item, options.queueIndex, unavailableReason));
 
   image.className = 'row-thumb';
   image.src = artworkUrl(item) || DEFAULT_COVER;
@@ -118,6 +116,7 @@ export function createQueueRow(item, options = {}) {
   row.append(image, info);
 
   if (/^(?:spotify:track|spool:local):/u.test(item.uri || '')) row.append(queueAddButton(item));
+  if (!options.playing) row.append(playButton(item, options.queueIndex, unavailableReason));
   if (options.playing) row.append(equalizerBars());
   return row;
 }

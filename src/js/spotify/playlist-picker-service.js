@@ -75,11 +75,19 @@ export class SpotifyPlaylistPickerService {
     const desired = Boolean(shouldContain);
     if (isLocalUri(uri)) {
       if (!this.hybridService) throw new Error("Local playlist overlays are unavailable.");
+      let resolvedItems = mergedItems;
+      if (desired && source?.kind === "playlist" && !Array.isArray(resolvedItems)) {
+        const cached = this.libraryService.getCachedSource(source.id);
+        const collection = cached?.complete
+          ? cached
+          : await this.libraryService.loadSource(source, { signal });
+        resolvedItems = await this.hybridService.mergeCollection(source.id, collection?.items || []);
+      }
       await this.hybridService.setLocalTrackMembership(
         source?.id || "liked-songs",
         localId(uri),
         desired,
-        { mergedItems },
+        { mergedItems: resolvedItems },
       );
       this.memberships.set(membershipKey(source, uri), desired);
       return desired;

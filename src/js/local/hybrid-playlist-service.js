@@ -65,15 +65,27 @@ export class HybridPlaylistService {
 
     if (!shouldContain) {
       overlay.placements = overlay.placements.filter((placement) => placement.localId !== trackId);
-    } else if (Array.isArray(mergedItems) && mergedItems.length) {
-      const next = [...mergedItems, localReference(trackId)];
+    } else if (Array.isArray(mergedItems)) {
+      const reference = localReference(trackId);
+      const next = id === LIKED_SOURCE_ID
+        ? [reference, ...mergedItems]
+        : [...mergedItems, reference];
       overlay.placements = placementsFromMerged(next);
     } else {
+      if (id === LIKED_SOURCE_ID) {
+        // Keep each newer local like ahead of every prior placement. Merely
+        // assigning fallbackIndex 0 is not enough because the older row may
+        // already occupy that index and would otherwise be inserted first.
+        overlay.placements = makeRoomForPrependedPlacement(overlay.placements);
+      }
       overlay.placements.push({
         localId: trackId,
         beforeKey: null,
         afterKey: null,
-        fallbackIndex: Number.MAX_SAFE_INTEGER,
+        // Spotify sorts Liked Songs newest-first. A local like is therefore
+        // placed at index zero, while ordinary playlists append it to the end
+        // of the collection as it existed when membership was changed.
+        fallbackIndex: id === LIKED_SOURCE_ID ? 0 : Number.MAX_SAFE_INTEGER,
         rank: overlay.placements.length,
       });
     }
@@ -242,6 +254,44 @@ export function localEntry(track) {
 
 export function isLocalEntry(entry) {
   return Boolean(entry?.hybridKind === "local" || entry?.isLocal || String(entry?.uri || "").startsWith("spool:local:"));
+}
+
+export function makeRoomForPrependedPlacement(placements = []) {
+  return (placements || []).map((placement) => ({
+    ...placement,
+    fallbackIndex: Math.min(
+      Number.MAX_SAFE_INTEGER,
+      (Number.isFinite(Number(placement?.fallbackIndex)) ? Number(placement.fallbackIndex) : Number.MAX_SAFE_INTEGER) + 1,
+    ),
+  }));
+}
+
+export function nextHybridIndex(items, currentIndex, { repeatMode = "off", fromEnded = false } = {}) {
+  const length = Array.isArray(items) ? items.length : Math.max(0, Number(items) || 0);
+  if (!length) return null;
+  const current = Math.max(0, Math.min(length - 1, Number(currentIndex) || 0));
+  if (fromEnded && repeatMode === "track") return current;
+  if (current + 1 < length) return current + 1;
+  return repeatMode === "context" ? 0 : null;
+}
+
+export function previousHybridIndex(items, currentIndex, { repeatMode = "off" } = {}) {
+  const length = Array.isArray(items) ? items.length : Math.max(0, Number(items) || 0);
+  if (!length) return null;
+  const current = Math.max(0, Math.min(length - 1, Number(currentIndex) || 0));
+  if (current > 0) return current - 1;
+  return repeatMode === "context" ? length - 1 : 0;
+}
+
+export function hybridUpcomingItems(items, currentIndex, { repeatMode = "off" } = {}) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return [];
+  const current = Math.max(0, Math.min(list.length - 1, Number(currentIndex) || 0));
+  if (repeatMode === "track") return [list[current]];
+  const remaining = list.slice(current + 1);
+  return repeatMode === "context"
+    ? [...remaining, ...list.slice(0, current + 1)]
+    : remaining;
 }
 
 function localReference(localId) {

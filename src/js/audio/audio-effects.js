@@ -14,6 +14,7 @@ const DEFAULTS = {
   reverb: 0,
   eqEnabled: true,
   eq: AUDIO_EQ_PRESETS.Flat,
+  analysisEnabled: false,
 };
 
 export function createAudioEffectsController({
@@ -28,6 +29,7 @@ export function createAudioEffectsController({
   const elementChains = new WeakMap();
   const sourceChains = new WeakMap();
   const internalConnect = new WeakSet();
+  const cleanupBound = new WeakSet();
   const state = normalizeSettings(DEFAULTS);
   const AudioContextClass = windowRef?.AudioContext || windowRef?.webkitAudioContext;
 
@@ -66,6 +68,7 @@ export function createAudioEffectsController({
       reverb: state.reverb,
       eqEnabled: state.eqEnabled,
       eq: state.eq.slice(),
+      analysisEnabled: state.analysisEnabled,
     };
   }
 
@@ -170,6 +173,9 @@ export function createAudioEffectsController({
       filter.Q.value = 1;
       filter.gain.value = state.eqEnabled ? state.eq[index] || 0 : 0;
     });
+    if (state.reverb > 0 && !chain.convolver.buffer) {
+      chain.convolver.buffer = makeImpulseResponse(chain.ctx);
+    }
     chain.wetGain.gain.value = state.reverb * 0.85;
   }
 
@@ -199,7 +205,6 @@ export function createAudioEffectsController({
     chain.analyser.fftSize = 1024;
     chain.analyser.smoothingTimeConstant = 0.82;
     chain.freqData = new Uint8Array(chain.analyser.frequencyBinCount);
-    chain.convolver.buffer = makeImpulseResponse(ctx);
     chain.wetGain.gain.value = 0;
 
     elementChains.set(el, chain);
@@ -279,7 +284,13 @@ export function createAudioEffectsController({
   }
 
   function applyToKnownMedia(reason) {
-    mediaElements.forEach((el) => applyToMedia(el, reason));
+    mediaElements.forEach((el) => {
+      if (!elementChains.has(el) && !el.isConnected && !el.currentSrc && !el.getAttribute?.("src")) {
+        mediaElements.delete(el);
+        return;
+      }
+      applyToMedia(el, reason);
+    });
     scanMedia(reason);
   }
 
@@ -296,6 +307,13 @@ export function createAudioEffectsController({
   function remember(el) {
     if (!(el instanceof windowRef.HTMLMediaElement)) return;
     mediaElements.add(el);
+    if (cleanupBound.has(el)) return;
+    cleanupBound.add(el);
+    el.addEventListener?.("emptied", () => {
+      if (!elementChains.has(el) && !el.currentSrc && !el.getAttribute?.("src")) {
+        mediaElements.delete(el);
+      }
+    });
   }
 
   function patchMediaElementSource() {
@@ -403,7 +421,8 @@ export function createAudioEffectsController({
   }
 
   function shouldCreateOwnSource(el, reason) {
-    return reason === "playing" || (reason === "settings" && isActiveMedia(el));
+    if (!requiresAudioGraph(state)) return false;
+    return reason === "playing" || reason === "play" || (reason === "settings" && isActiveMedia(el));
   }
 
   function isActiveMedia(el) {
@@ -427,7 +446,16 @@ function normalizeSettings(raw = {}) {
   const reverb = clamp(Number(raw.reverb), 0, 1, DEFAULTS.reverb);
   const eqEnabled = raw.eqEnabled !== false;
   const eq = AUDIO_EQ_BANDS.map((_, index) => clamp(Number(raw.eq?.[index]), -12, 12, 0));
-  return { speed, reverb, eqEnabled, eq };
+  const analysisEnabled = Boolean(raw.analysisEnabled);
+  return { speed, reverb, eqEnabled, eq, analysisEnabled };
+}
+
+export function requiresAudioGraph(settings = {}) {
+  return Boolean(
+    settings.analysisEnabled
+    || Number(settings.reverb) > 0
+    || (settings.eqEnabled !== false && Array.isArray(settings.eq) && settings.eq.some((value) => Math.abs(Number(value) || 0) > 0.001)),
+  );
 }
 
 function filterType(index, total) {

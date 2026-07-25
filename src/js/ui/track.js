@@ -88,7 +88,6 @@ function trackHeader(track, kind) {
   play.disabled = !track.playable || !track.uri;
   play.textContent = "Play song";
   actions.append(play);
-  if (/^spotify:track:/u.test(track.uri || "")) actions.append(addToPlaylistButton(track));
   if (track.album?.id) {
     const release = document.createElement("button");
     release.className = "btn";
@@ -99,6 +98,7 @@ function trackHeader(track, kind) {
     actions.append(release);
   }
   if (track.externalUrl) actions.append(externalLink(track.externalUrl));
+  if (/^spotify:track:/u.test(track.uri || "")) actions.append(addToPlaylistButton(track));
   copy.append(type, title, artists, meta, actions);
   header.append(image, copy);
   return header;

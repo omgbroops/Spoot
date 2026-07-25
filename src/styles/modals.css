@@ -293,12 +293,12 @@
 
 .library-track {
   display: grid;
-  grid-template-columns: 46px minmax(150px, 1.5fr) minmax(120px, 1fr) 44px auto;
+  grid-template-columns: 46px minmax(150px, 1.5fr) minmax(120px, 1fr) 44px 68px;
 }
 
 .library-track-head {
   display: grid;
-  grid-template-columns: 46px minmax(150px, 1.5fr) minmax(120px, 1fr) 44px auto;
+  grid-template-columns: 46px minmax(150px, 1.5fr) minmax(120px, 1fr) 44px 68px;
   gap: 12px;
   align-items: center;
   padding: 6px 8px 8px;
@@ -570,7 +570,11 @@
   text-transform: uppercase;
 }
 
-.album-track-head span:last-child {
+.album-track-head span:first-child {
+  text-align: center;
+}
+
+.album-track-head span:nth-child(3) {
   text-align: right;
 }
 
@@ -1229,7 +1233,7 @@ button.toggle {
 @media (max-width: 540px) {
   .library-track,
   .library-track-head {
-    grid-template-columns: 46px minmax(0, 1fr) 40px auto;
+    grid-template-columns: 46px minmax(0, 1fr) 40px 68px;
   }
 
   .library-track-album,
@@ -1732,7 +1736,7 @@ button.toggle {
   max-height: calc(88vh - 66px);
   overflow: hidden auto;
   overscroll-behavior: contain;
-  padding: 16px 12px 14px;
+  padding: 16px 12px 30px;
   border-radius: inherit;
   scrollbar-gutter: stable;
 }
@@ -2064,17 +2068,6 @@ button.toggle {
 .library-track.dragging-row { opacity: .48; cursor: grabbing; }
 .playlist-track.drag-over,
 .library-track.drag-over { box-shadow: inset 0 2px 0 rgba(255,255,255,.7); }
-.local-overlay-row { position: relative; background: rgba(255,255,255,.025); }
-.local-overlay-row::before {
-  content: "LOCAL";
-  position: absolute;
-  right: 8px;
-  top: 4px;
-  color: var(--text-faint);
-  font-size: 8px;
-  letter-spacing: .08em;
-}
-
 /* Queue actions are deliberately quiet until hover/focus. */
 .queue-add-playlist {
   flex: 0 0 auto;
@@ -2098,6 +2091,7 @@ button.toggle {
 .queue-row .row-play-now svg { width: 15px; height: 15px; }
 .queue-row:hover .row-play-now { color: var(--text); }
 .queue-row > .queue-add-playlist { margin-left: auto; }
+.queue-row > .row-play-now { margin-left: 2px; }
 
 /* Shuffle is intentionally disabled until hybrid ordering has one authority. */
 #btn-shuffle:disabled,

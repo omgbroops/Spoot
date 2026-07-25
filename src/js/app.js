@@ -14,7 +14,7 @@ import {
   AUDIO_EQ_BANDS,
   AUDIO_EQ_PRESETS,
   createAudioEffectsController,
-} from "./audio/audio-effects.js";
+} from "./audio/audio-effects.js?v=20260725-hybrid3";
 import { SpotifyApiClient, SpotifyApiError } from "./spotify/api-client.js?v=20260725-hybrid2";
 import { SpotifyPlaybackSdk } from "./spotify/playback-sdk.js";
 import { PlaybackController } from "./spotify/playback-controller.js?v=20260725-hybrid2";
@@ -25,9 +25,15 @@ import { SpotifyAlbumService } from "./spotify/album-service.js?v=20260725-hybri
 import { SpotifyArtistService } from "./spotify/artist-service.js?v=20260725-hybrid2";
 import { SpotifyTrackService } from "./spotify/track-service.js?v=20260725-hybrid2";
 import { SpotifyPlaylistService } from "./spotify/playlist-service.js?v=20260725-hybrid2";
-import { SpotifyPlaylistPickerService } from "./spotify/playlist-picker-service.js?v=20260725-hybrid2";
-import { LocalLibraryService, localSource } from "./local/local-library.js?v=20260725-hybrid2";
-import { HybridPlaylistService, isLocalEntry } from "./local/hybrid-playlist-service.js?v=20260725-hybrid2";
+import { SpotifyPlaylistPickerService } from "./spotify/playlist-picker-service.js?v=20260725-hybrid3";
+import { LocalLibraryService, localSource } from "./local/local-library.js?v=20260725-hybrid3";
+import {
+  HybridPlaylistService,
+  hybridUpcomingItems,
+  isLocalEntry,
+  nextHybridIndex,
+  previousHybridIndex,
+} from "./local/hybrid-playlist-service.js?v=20260725-hybrid3";
 import { LocalPlaybackController, localIdFromUri } from "./local/local-playback-controller.js?v=20260725-hybrid2";
 import { DropboxImportService } from "./local/dropbox-service.js?v=20260725-hybrid2";
 import { LyricsService, lyricsToText } from "./lyrics/lyrics-service.js?v=20260725-hybrid2";
@@ -46,12 +52,12 @@ import {
   renderProgress,
   setPlaybackControlsEnabled,
 } from "./ui/now-playing.js";
-import { renderQueue, renderQueueUnavailable, setupQueue } from "./ui/queue.js?v=20260725-hybrid2";
+import { renderQueue, renderQueueUnavailable, setupQueue } from "./ui/queue.js?v=20260725-hybrid3";
 import {
   renderLibraryDetail,
   renderLibrarySources,
   setupLibrary,
-} from "./ui/library.js?v=20260725-hybrid2";
+} from "./ui/library.js?v=20260725-hybrid3";
 import {
   animateSearchContent,
   focusSearch,
@@ -62,7 +68,7 @@ import {
 } from "./ui/search.js?v=20260725-hybrid2";
 import { renderAlbum, setupAlbum } from "./ui/album.js?v=20260725-hybrid2";
 import { renderArtist, setupArtist } from "./ui/artist.js?v=20260725-hybrid2";
-import { renderTrack, setupTrack } from "./ui/track.js?v=20260725-hybrid2";
+import { renderTrack, setupTrack } from "./ui/track.js?v=20260725-hybrid3";
 import { renderPlaylist, setupPlaylistInteractions } from "./ui/playlist.js?v=20260725-hybrid2";
 import {
   addPlaylistPickerSource,
@@ -77,7 +83,7 @@ import { setupPlaylistEditor, prepareCreatePlaylist, prepareEditPlaylist, setPla
 import { preparePlaylistCover } from "./spotify/playlist-image.js?v=20260725-hybrid2";
 import { setupLyricsEditor, showLyricsEditor, showLyricsResults, deliverLyricsText, updateLyricsSyncPlayback, handleLyricsSyncKey } from "./ui/lyrics-editor.js?v=20260725-hybrid2";
 import { renderDropbox, setupDropbox } from "./ui/dropbox.js?v=20260725-hybrid2";
-import { renderLyrics, setupLyrics, updateLyricsPosition } from "./ui/lyrics.js";
+import { renderLyrics, setupLyrics, updateLyricsPosition } from "./ui/lyrics.js?v=20260725-hybrid3";
 import { renderDevicePicker, setupDevicePicker } from "./ui/device-picker.js";
 import {
   renderMediaSession,
@@ -589,7 +595,7 @@ function bindLocalController(nextController) {
       renderVolume();
     }),
     nextController.on("ended", () => {
-      if (hybridSession) playHybridIndex(hybridSession.index + 1, { fromEnded: true }).catch((error) => showToast(humanizeError(error)));
+      if (hybridSession) advanceHybridAfterEnd().catch((error) => showToast(humanizeError(error)));
     }),
     nextController.on("notice", ({ message }) => showToast(message)),
     nextController.on("error", ({ message, error, operation }) => {
@@ -754,7 +760,7 @@ function bindController(nextController) {
       renderVolume();
     }),
     nextController.on("ended", () => {
-      if (hybridSession) playHybridIndex(hybridSession.index + 1, { fromEnded: true }).catch((error) => showToast(humanizeError(error)));
+      if (hybridSession) advanceHybridAfterEnd().catch((error) => showToast(humanizeError(error)));
     }),
     nextController.on("notice", ({ message }) => showToast(message)),
     nextController.on("null-state", ({ message }) => {
@@ -1290,15 +1296,9 @@ async function startHybridPlayback(playlistId, requestedIndex = 0) {
     items,
     index: position,
     enteredLocal: false,
-    lastSpotifyIndex: findPreviousSpotifyIndex(items, position),
-    resumeSpotify: spotifyPlayback?.currentItem
-      ? {
-          itemUri: spotifyPlayback.itemUri || spotifyPlayback.currentItem.uri || null,
-          contextUri: spotifyPlayback.context?.uri || null,
-          positionMs: Number(spotifyPlayback.positionMs) || 0,
-          wasPlaying: Boolean(spotifyPlayback.isPlaying),
-        }
-      : null,
+    repeatMode: ["off", "context", "track"].includes(spotifyPlayback?.repeatMode)
+      ? spotifyPlayback.repeatMode
+      : "off",
   };
   return playHybridIndex(position);
 }
@@ -1342,7 +1342,12 @@ async function playHybridIndex(index, { fromEnded = false } = {}) {
   hybridBoundaryTimer = null;
   if (!hybridSession || hybridTransitioning) return;
   if (index < 0) index = 0;
-  if (index >= hybridSession.items.length) return finishHybridPlayback();
+  if (index >= hybridSession.items.length) {
+    index = fromEnded && hybridSession.repeatMode === "track"
+      ? hybridSession.index
+      : hybridSession.repeatMode === "context" ? index % hybridSession.items.length : -1;
+  }
+  if (index < 0) return finishHybridPlayback();
   const item = hybridSession.items[index];
   if (!item?.uri) return playHybridIndex(index + 1, { fromEnded });
   hybridTransitioning = true;
@@ -1353,16 +1358,15 @@ async function playHybridIndex(index, { fromEnded = false } = {}) {
       const localId = item.localId || localIdFromUri(item.uri);
       if (!localId || !localController) throw new Error("That local song is unavailable.");
       await activateLocalPlayback();
+      await localController.setRepeat(hybridSession.repeatMode);
       await localController.playTrack(localId, { contextIds: [localId], autoAdvance: false });
     } else {
-      hybridSession.lastSpotifyIndex = index;
       await activateSpotifyPlayback();
-      const contextPosition = Number.isInteger(item.spotifyPosition)
-        ? item.spotifyPosition
-        : countSpotifyBefore(hybridSession.items, index);
       await controller.playNow(item.uri, {
-        contextUri: hybridSession.contextUri,
-        contextPosition,
+        // A Spotify context cannot contain Spool's client-only local rows.
+        // Start exactly one remote item and let the hybrid session own every
+        // transition so natural endings, skips, previous, and repeat agree.
+        uris: [item.uri],
       });
     }
     renderHybridQueue();
@@ -1375,137 +1379,127 @@ function syncHybridSpotifyIndex(playback) {
   if (!hybridSession || playbackMode !== "spotify" || hybridTransitioning) return;
   const uri = playback?.itemUri || playback?.currentItem?.uri || playback?.item?.uri;
   if (!uri) return;
-  const nearby = hybridSession.items.findIndex((item, index) => (
-    !isLocalEntry(item) &&
-    item.uri === uri &&
-    index >= Math.max(0, hybridSession.index - 1)
-  ));
-  if (nearby >= 0) {
-    if (nearby !== hybridSession.index) {
-      clearTimeout(hybridBoundaryTimer);
-      hybridBoundaryTimer = null;
-    }
-    hybridSession.index = nearby;
-    hybridSession.lastSpotifyIndex = nearby;
-  } else if (hybridSession.index >= hybridSession.items.length - 1) {
-    hybridSession = null;
-  }
+  const expected = hybridSession.items[hybridSession.index];
+  if (!isLocalEntry(expected) && expected?.uri === uri) return;
+
+  // A throttled/background tab may miss the end timer and Spotify may expose
+  // an autoplay item. Reassert the next merged row instead of skipping a local
+  // placement or abandoning the selected playlist.
+  const target = nextHybridIndex(hybridSession.items, hybridSession.index, {
+    repeatMode: hybridSession.repeatMode,
+    fromEnded: true,
+  });
+  if (target === null) finishHybridPlayback().catch(() => {});
+  else playHybridIndex(target, { fromEnded: true }).catch((error) => showToast(humanizeError(error)));
 }
 
 function maybeEnterHybridLocal(positionMs) {
   if (!hybridSession || hybridTransitioning || hybridBoundaryTimer) return;
   const current = hybridSession.items[hybridSession.index];
-  const next = hybridSession.items[hybridSession.index + 1];
-  if (!current || !currentPlayback?.isPlaying) return;
+  if (!current || playbackMode !== "spotify" || !currentPlayback?.isPlaying) return;
   const remaining = Math.max(0, (Number(currentPlayback.durationMs) || 0) - (Number(positionMs) || 0));
-
-  // Once the final Spotify song is nearly complete, release control so
-  // Spotify's own autoplay/recommendation queue can continue normally.
-  if (!next && !isLocalEntry(current) && remaining <= 450) {
-    hybridSession = null;
-    currentQueue = spotifyQueue;
-    if (currentQueue) renderQueue(currentQueue);
-    return;
-  }
-
-  const crossesEngines = Boolean(next) && isLocalEntry(current) !== isLocalEntry(next);
-  if (!crossesEngines || remaining > 1_200) return;
+  if (!Number(currentPlayback.durationMs) || remaining > 1_500) return;
+  const session = hybridSession;
+  const expectedIndex = session.index;
   const delay = Math.max(0, remaining - 70);
   hybridBoundaryTimer = setTimeout(async () => {
     hybridBoundaryTimer = null;
-    if (!hybridSession || hybridTransitioning) return;
+    if (!hybridSession || hybridSession !== session || hybridSession.index !== expectedIndex || hybridTransitioning) return;
     try {
-      if (playbackMode === "spotify") await controller?.togglePlay?.().catch(() => {});
-      else await localController?.pause?.().catch(() => {});
-      await playHybridIndex(hybridSession.index + 1, { fromEnded: true });
+      const target = nextHybridIndex(hybridSession.items, hybridSession.index, {
+        repeatMode: hybridSession.repeatMode,
+        fromEnded: true,
+      });
+      if (target === null) await finishHybridPlayback({ allowCurrentToEnd: true });
+      else await playHybridIndex(target, { fromEnded: true });
     } catch (error) {
       showToast(humanizeError(error));
     }
   }, delay);
 }
 
-async function finishHybridPlayback() {
+async function finishHybridPlayback({ allowCurrentToEnd = false } = {}) {
   clearTimeout(hybridBoundaryTimer);
   hybridBoundaryTimer = null;
   const session = hybridSession;
   hybridSession = null;
   if (!session) return;
-  if (playbackMode === "local") {
-    await localController?.pause?.().catch(() => {});
-    const hadHybridSpotify = session.lastSpotifyIndex >= 0 && controller;
-    const resumableSpotify = session.resumeSpotify?.itemUri && controller;
-    if (hadHybridSpotify || resumableSpotify) {
-      await activateSpotifyPlayback();
-      try {
-        if (hadHybridSpotify) {
-          // Spotify is paused on the last remote item that preceded the local
-          // segment. One next command hands control back to its real queue,
-          // including any autoplay/recommendation tail Spotify owns.
-          await controller.next();
-        } else if (session.resumeSpotify.wasPlaying && !spotifyPlayback?.isPlaying) {
-          // An all-local Spool overlay has no Spotify item to advance from.
-          // Resume the untouched Spotify session that was playing before the
-          // local-only playlist took over.
-          await controller.togglePlay();
-        }
-        await Promise.allSettled([
-          controller.refreshState?.(),
-          controller.refreshQueue?.(),
-        ]);
-      } catch (error) {
-        showToast("The hybrid playlist ended. Resume Spotify from another song if autoplay did not continue.");
-      }
-    }
-  }
-  currentQueue = playbackMode === "spotify" ? spotifyQueue : currentQueue;
-  if (currentQueue) renderQueue(currentQueue);
+  if (playbackMode === "local") await localController?.pause?.().catch(() => {});
+  else if (!allowCurrentToEnd && spotifyPlayback?.isPlaying) await controller?.togglePlay?.().catch(() => {});
+  currentQueue = {
+    status: "ready",
+    source: playbackMode,
+    currentItem: currentPlayback?.currentItem || currentPlayback?.item || null,
+    items: [],
+  };
+  renderQueue(currentQueue);
 }
 
 function renderHybridQueue() {
   if (!hybridSession) return;
   const current = hybridSession.items[hybridSession.index] || currentPlayback?.currentItem || null;
-  const hybridUpcoming = hybridSession.items.slice(hybridSession.index + 1);
-  const spotifyTail = Array.isArray(spotifyQueue?.items)
-    ? spotifyQueue.items
-    : Array.isArray(spotifyQueue?.upcoming) ? spotifyQueue.upcoming : [];
-  const seen = new Set(hybridUpcoming.map((item) => `${item.uri}|${item.title}`));
-  const tail = spotifyTail.filter((item) => !seen.has(`${item.uri}|${item.title}`));
+  const hybridUpcoming = hybridUpcomingItems(hybridSession.items, hybridSession.index, {
+    repeatMode: hybridSession.repeatMode,
+  });
   currentQueue = {
     status: "ready",
     source: "hybrid",
     currentItem: current,
-    items: [...hybridUpcoming, ...tail],
+    items: hybridUpcoming,
     hybridLength: hybridUpcoming.length,
   };
   renderQueue(currentQueue);
 }
 
-function findPreviousSpotifyIndex(items, start) {
-  for (let index = Math.min(start, items.length - 1); index >= 0; index -= 1) {
-    if (!isLocalEntry(items[index])) return index;
-  }
-  return -1;
-}
-
-function countSpotifyBefore(items, index) {
-  return items.slice(0, Math.max(0, index)).filter((item) => !isLocalEntry(item)).length;
-}
-
 async function nextPlayback() {
-  if (hybridSession) return playHybridIndex(hybridSession.index + 1);
+  if (hybridSession) {
+    const target = nextHybridIndex(hybridSession.items, hybridSession.index, {
+      repeatMode: hybridSession.repeatMode,
+    });
+    return target === null ? finishHybridPlayback() : playHybridIndex(target);
+  }
   return activeController()?.next?.();
+}
+
+async function advanceHybridAfterEnd() {
+  if (!hybridSession) return;
+  const target = nextHybridIndex(hybridSession.items, hybridSession.index, {
+    repeatMode: hybridSession.repeatMode,
+    fromEnded: true,
+  });
+  return target === null ? finishHybridPlayback() : playHybridIndex(target, { fromEnded: true });
 }
 
 async function previousPlayback() {
   if (hybridSession) {
     if ((Number(currentPlayback?.positionMs) || 0) > 3_000) return activeController()?.seek?.(0);
-    return playHybridIndex(Math.max(0, hybridSession.index - 1));
+    return playHybridIndex(previousHybridIndex(hybridSession.items, hybridSession.index, {
+      repeatMode: hybridSession.repeatMode,
+    }));
   }
   return activeController()?.previous?.();
 }
 
 async function togglePlayback() {
   return activeController()?.togglePlay?.();
+}
+
+async function setRepeatPlayback(mode) {
+  if (!hybridSession) return activeController()?.setRepeat?.(mode);
+  hybridSession.repeatMode = mode;
+  if (playbackMode === "spotify") await controller?.setRepeat?.(mode);
+  else await localController?.setRepeat?.(mode);
+  const mirror = playbackMode === "spotify" ? localController : controller;
+  mirror?.setRepeat?.(mode).catch(() => {});
+  renderHybridQueue();
+  return mode;
+}
+
+async function cycleRepeatPlayback() {
+  if (!hybridSession) return activeController()?.cycleRepeat?.();
+  const modes = ["off", "context", "track"];
+  const current = modes.includes(hybridSession.repeatMode) ? hybridSession.repeatMode : "off";
+  return setRepeatPlayback(modes[(modes.indexOf(current) + 1) % modes.length]);
 }
 
 async function searchSpotify(query, { force = false } = {}) {
@@ -1906,7 +1900,10 @@ async function playQueueItem(selection) {
     const hybridUpcoming = Math.max(0, Number(currentQueue.hybridLength) || 0);
     try {
       if (queueIndex < hybridUpcoming) {
-        await playHybridIndex(hybridSession.index + 1 + queueIndex);
+        const target = hybridSession.repeatMode === "track"
+          ? hybridSession.index
+          : (hybridSession.index + 1 + queueIndex) % hybridSession.items.length;
+        await playHybridIndex(target);
       } else {
         // The Spotify-generated tail is still owned by Spotify. Preserve that
         // live context and advance through it rather than replacing it with a
@@ -2680,6 +2677,7 @@ function applySoundSettings() {
     reverb: soundSettings.reverb,
     eqEnabled: true,
     eq: soundSettings.eq,
+    analysisEnabled: ambientAudioReaction,
   });
 }
 
@@ -2697,7 +2695,7 @@ function renderSoundSettings() {
   if (elements.speedValue) elements.speedValue.textContent = `${speed.toFixed(2)}x`;
   if (elements.reverbRange) {
     elements.reverbRange.value = String(reverb);
-    elements.reverbRange.disabled = !captured;
+    elements.reverbRange.disabled = !(captured || localActive);
   }
   if (elements.reverbValue) elements.reverbValue.textContent = `${Math.round(reverb * 100)}%`;
   if (elements.soundCaptureStatus) {
@@ -2715,11 +2713,11 @@ function renderSoundSettings() {
 
   elements.eqSliders.forEach((slider, index) => {
     slider.value = String(soundSettings.eq[index] ?? 0);
-    slider.disabled = !captured;
+    slider.disabled = !(captured || localActive);
   });
   elements.eqPresets?.querySelectorAll("[data-preset]").forEach((button) => {
     button.classList.toggle("active", button.dataset.preset === soundSettings.eqPreset);
-    button.disabled = !captured;
+    button.disabled = !(captured || localActive);
   });
 }
 
@@ -2745,6 +2743,7 @@ function updateMediaPreferences() {
   });
   renderMediaSession(currentPlayback);
   renderSettings();
+  applySoundSettings();
   updateAmbientLoop();
   saveUiPreferences();
 }
@@ -2770,7 +2769,7 @@ function bindPlaybackButtons() {
     shuffle.setAttribute("aria-disabled", "true");
     shuffle.title = "Shuffle is disabled while Spool develops hybrid playlist playback";
   }
-  bindCommand([elements.repeat, elements.immersiveRepeat], () => activeController()?.cycleRepeat());
+  bindCommand([elements.repeat, elements.immersiveRepeat], cycleRepeatPlayback);
 }
 
 function bindCommand(elements, command) {
@@ -2884,11 +2883,11 @@ async function executeCommand(command) {
     throw new Error("Shuffle is temporarily disabled while Spool develops hybrid playlist playback.");
   }
   if (name === "repeat") {
-    const target = requirePlayback();
+    requirePlayback();
     const value = argument.toLowerCase();
     const mode = value === "all" ? "context" : value === "one" ? "track" : value;
-    if (!mode) await target.cycleRepeat();
-    else if (["off", "context", "track"].includes(mode)) await target.setRepeat(mode);
+    if (!mode) await cycleRepeatPlayback();
+    else if (["off", "context", "track"].includes(mode)) await setRepeatPlayback(mode);
     else throw new Error("Use repeat off, repeat context, or repeat track.");
     return;
   }

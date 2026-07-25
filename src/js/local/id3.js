@@ -99,7 +99,7 @@ export function parseId3(arrayBuffer) {
     }
   }
 
-  if ((!output.title || !output.artist) && bytes.length > 128) {
+  if ((!output.title || !output.artist) && bytes.length >= 128) {
     const offset = bytes.length - 128;
     if (bytes[offset] === 0x54 && bytes[offset + 1] === 0x41 && bytes[offset + 2] === 0x47) {
       const decode = (start, end) => clean(decodeString(bytes.subarray(start, end), 0));

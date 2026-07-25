@@ -6,6 +6,7 @@ const TRACKS = "tracks";
 const AUDIO = "audio";
 const COVERS = "covers";
 const COVER_URL_LIMIT = 32;
+const MAX_ID3_BYTES = 16 * 1024 * 1024;
 const AUDIO_PATTERN = /(?:^audio\/|\.(?:mp3|m4a|flac|ogg|wav|aac|opus)$)/iu;
 
 export class LocalLibraryService {
@@ -56,9 +57,8 @@ export class LocalLibraryService {
   }
 
   async importBlob(blob, filename, { source = "local" } = {}) {
-    const buffer = await blob.arrayBuffer();
     let tags = {};
-    try { tags = parseId3(buffer); } catch {}
+    try { tags = await readId3Tags(blob); } catch {}
     const id = globalThis.crypto?.randomUUID?.() || `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const baseName = String(filename || "Local song").replace(/\.[^.]+$/u, "");
     const durationMs = await readDuration(blob).catch(() => 0);
@@ -211,6 +211,40 @@ export class LocalLibraryService {
     for (const url of this.coverUrls.values()) URL.revokeObjectURL(url);
     this.coverUrls.clear();
   }
+}
+
+export async function readId3Tags(blob) {
+  if (!(blob instanceof Blob) || !blob.size) return {};
+  const header = new Uint8Array(await blob.slice(0, Math.min(10, blob.size)).arrayBuffer());
+  let prefixLength = header.length;
+  if (
+    header.length >= 10
+    && header[0] === 0x49
+    && header[1] === 0x44
+    && header[2] === 0x33
+  ) {
+    const tagLength = ((header[6] & 0x7f) << 21)
+      | ((header[7] & 0x7f) << 14)
+      | ((header[8] & 0x7f) << 7)
+      | (header[9] & 0x7f);
+    prefixLength = Math.min(blob.size, MAX_ID3_BYTES, 10 + tagLength);
+  }
+
+  const prefix = prefixLength === header.length
+    ? header.buffer
+    : await blob.slice(0, prefixLength).arrayBuffer();
+  const tags = parseId3(prefix);
+
+  // ID3v1 lives in the final 128 bytes. Read only that tail instead of
+  // materializing the entire audio file in JavaScript just to find fallback
+  // title/artist/album text.
+  if (blob.size >= 128 && (!tags.title || !tags.artist || !tags.album)) {
+    const fallback = parseId3(await blob.slice(blob.size - 128).arrayBuffer());
+    tags.title ||= fallback.title;
+    tags.artist ||= fallback.artist;
+    tags.album ||= fallback.album;
+  }
+  return tags;
 }
 
 export function localSource(tracks = []) {
