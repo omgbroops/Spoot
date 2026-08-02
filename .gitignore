@@ -1,0 +1,12 @@
+# Local Spotify configuration. Never commit Client IDs from private setups.
+src/js/config.local.js
+
+# Test and browser artifacts
+coverage/
+test-results/
+*.log
+
+# Optional local tooling
+node_modules/
+.DS_Store
+Thumbs.db
