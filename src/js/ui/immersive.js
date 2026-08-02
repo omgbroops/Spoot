@@ -80,7 +80,7 @@ export function openImmersive() {
   elements.immersiveButton?.classList.add('active');
   elements.immersiveButton?.setAttribute('aria-pressed', 'true');
   if (elements.background) elements.background.style.opacity = '0';
-  document.dispatchEvent(new CustomEvent('spool:immersive-change', { detail: { open: true } }));
+  document.dispatchEvent(new CustomEvent('spoot:immersive-change', { detail: { open: true } }));
   return true;
 }
 
@@ -92,7 +92,7 @@ export function closeImmersive() {
   elements.immersiveButton?.classList.remove('active');
   elements.immersiveButton?.setAttribute('aria-pressed', 'false');
   if (elements.background) elements.background.style.opacity = '';
-  document.dispatchEvent(new CustomEvent('spool:immersive-change', { detail: { open: false } }));
+  document.dispatchEvent(new CustomEvent('spoot:immersive-change', { detail: { open: false } }));
 }
 
 export function toggleImmersive() {

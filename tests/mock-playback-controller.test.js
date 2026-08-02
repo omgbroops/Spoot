@@ -11,7 +11,7 @@ test("mock controller drives the real controller-shaped playback flow", async ()
   controller.on("queue", (queue) => queues.push(queue));
 
   await controller.connect();
-  assert.equal(controller.deviceId, "spool-mock-device");
+  assert.equal(controller.deviceId, "spoot-mock-device");
   assert.equal(controller.playbackState.title, "Silver Thread");
   assert.equal(controller.queue.upcoming.length, 2);
 

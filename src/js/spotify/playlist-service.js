@@ -86,7 +86,7 @@ export class SpotifyPlaylistService {
       }
     } catch (error) {
       if (!(error instanceof SpotifyApiError) || error.status !== 403) throw error;
-      unavailableReason = "Spotify lets Spool play this playlist, but Development Mode does not allow its song list to be read.";
+      unavailableReason = "Spotify lets Spoot play this playlist, but Development Mode does not allow its song list to be read.";
     }
 
     const items = rawItems

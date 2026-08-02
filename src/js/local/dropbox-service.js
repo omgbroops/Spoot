@@ -1,5 +1,5 @@
-const DROPBOX_TOKEN_KEY = "spool.dropbox.tokens";
-const DROPBOX_VERIFIER_KEY = "spool.dropbox.verifier";
+const DROPBOX_TOKEN_KEY = "spoot.dropbox.tokens";
+const DROPBOX_VERIFIER_KEY = "spoot.dropbox.verifier";
 const AUDIO_PATTERN = /\.(?:mp3|m4a|flac|ogg|wav|aac|opus)$/iu;
 const LYRICS_PATTERN = /\.(?:lrc|txt)$/iu;
 

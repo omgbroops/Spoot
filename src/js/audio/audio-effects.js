@@ -160,7 +160,7 @@ export function createAudioEffectsController({
       if (Math.abs((Number(el.defaultPlaybackRate) || 1) - rate) > 0.001) el.defaultPlaybackRate = rate;
       applyPitch(el);
     } catch (error) {
-      console.warn("Spool could not apply playback speed.", error);
+      console.warn("Spoot could not apply playback speed.", error);
     } finally {
       internalRateSet = false;
     }
@@ -242,7 +242,7 @@ export function createAudioEffectsController({
       }
       return chain.analyser;
     } catch (error) {
-      console.warn("Spool audio effects routing failed.", error);
+      console.warn("Spoot audio effects routing failed.", error);
       return originalConnect.apply(chain.source, args);
     } finally {
       [chain.source, ...chain.filters, chain.analyser, chain.convolver, chain.wetGain]
@@ -319,8 +319,8 @@ export function createAudioEffectsController({
   function patchMediaElementSource() {
     if (!AudioContextClass?.prototype?.createMediaElementSource) return;
     const proto = AudioContextClass.prototype;
-    if (proto.__spoolCreateMediaElementSourcePatched) return;
-    proto.__spoolCreateMediaElementSourcePatched = true;
+    if (proto.__spootCreateMediaElementSourcePatched) return;
+    proto.__spootCreateMediaElementSourcePatched = true;
 
     const original = proto.createMediaElementSource;
     proto.createMediaElementSource = function createMediaElementSource(el) {
@@ -337,8 +337,8 @@ export function createAudioEffectsController({
   function patchAudioNodeConnect() {
     if (!windowRef.AudioNode?.prototype?.connect) return;
     const proto = windowRef.AudioNode.prototype;
-    if (proto.__spoolConnectPatched) return;
-    proto.__spoolConnectPatched = true;
+    if (proto.__spootConnectPatched) return;
+    proto.__spootConnectPatched = true;
 
     const original = proto.connect;
     nativeConnect = original;
@@ -355,8 +355,8 @@ export function createAudioEffectsController({
 
   function patchMediaCreation() {
     const originalCreateElement = windowRef.Document?.prototype?.createElement;
-    if (originalCreateElement && !windowRef.Document.prototype.__spoolCreateElementPatched) {
-      windowRef.Document.prototype.__spoolCreateElementPatched = true;
+    if (originalCreateElement && !windowRef.Document.prototype.__spootCreateElementPatched) {
+      windowRef.Document.prototype.__spootCreateElementPatched = true;
       windowRef.Document.prototype.createElement = function createElement(tagName, options) {
         const el = originalCreateElement.call(this, tagName, options);
         if (["audio", "video"].includes(String(tagName || "").toLowerCase())) {
@@ -370,8 +370,8 @@ export function createAudioEffectsController({
     }
 
     const originalPlay = windowRef.HTMLMediaElement?.prototype?.play;
-    if (originalPlay && !windowRef.HTMLMediaElement.prototype.__spoolPlayPatched) {
-      windowRef.HTMLMediaElement.prototype.__spoolPlayPatched = true;
+    if (originalPlay && !windowRef.HTMLMediaElement.prototype.__spootPlayPatched) {
+      windowRef.HTMLMediaElement.prototype.__spootPlayPatched = true;
       windowRef.HTMLMediaElement.prototype.play = function play(...args) {
         applyToMedia(this, "play");
         return originalPlay.apply(this, args);
@@ -379,8 +379,8 @@ export function createAudioEffectsController({
     }
 
     const srcDescriptor = Object.getOwnPropertyDescriptor(windowRef.HTMLMediaElement.prototype, "src");
-    if (srcDescriptor?.set && srcDescriptor?.get && !windowRef.HTMLMediaElement.prototype.__spoolSrcPatched) {
-      windowRef.HTMLMediaElement.prototype.__spoolSrcPatched = true;
+    if (srcDescriptor?.set && srcDescriptor?.get && !windowRef.HTMLMediaElement.prototype.__spootSrcPatched) {
+      windowRef.HTMLMediaElement.prototype.__spootSrcPatched = true;
       Object.defineProperty(windowRef.HTMLMediaElement.prototype, "src", {
         configurable: true,
         enumerable: srcDescriptor.enumerable,

@@ -1,4 +1,4 @@
-const DB_NAME = "spool-lyrics";
+const DB_NAME = "spoot-lyrics";
 const DB_VERSION = 1;
 const STORE = "lyrics";
 
@@ -75,7 +75,7 @@ export class LyricsStore {
 }
 
 export function lyricsRecordKey(track) {
-  if (track?.isLocal || String(track?.uri || "").startsWith("spool:local:")) {
+  if (track?.isLocal || String(track?.uri || "").startsWith("spoot:local:")) {
     const id = track?.localId || track?.id || String(track?.uri || "").split(":").pop();
     return id ? `local:${id}` : null;
   }

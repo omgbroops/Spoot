@@ -1,6 +1,6 @@
 import { getElements } from './elements.js';
 
-export const WIDGET_POSITION_STORAGE_KEY = 'spool.ui.widget-positions';
+export const WIDGET_POSITION_STORAGE_KEY = 'spoot.ui.widget-positions';
 const EDGE_MARGIN = 10;
 const EXCLUDED_TARGETS = 'button,input,textarea,select,a,.seek,.list,.lyr-list,.row,[data-nodrag]';
 
@@ -197,7 +197,7 @@ export function setHiddenMode(hidden, options = {}) {
   elements.body?.classList.toggle('hidden-mode', hidden);
   elements.blank?.classList.toggle('show', hidden);
   elements.blank?.setAttribute('aria-hidden', String(!hidden));
-  document.dispatchEvent(new CustomEvent('spool:hidden-change', { detail: { hidden } }));
+  document.dispatchEvent(new CustomEvent('spoot:hidden-change', { detail: { hidden } }));
   return true;
 }
 

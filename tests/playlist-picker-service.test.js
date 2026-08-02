@@ -80,7 +80,7 @@ test("picker mutations invalidate the matching session-cached source and update 
 test("adding a local song snapshots the current merged playlist before anchoring it", async () => {
   const library = createLibrary();
   const remote = { uri: "spotify:track:kitten", title: "Kitten" };
-  const existingLocal = { uri: "spool:local:older", localId: "older", title: "Older local" };
+  const existingLocal = { uri: "spoot:local:older", localId: "older", title: "Older local" };
   library.loadSource = async () => ({ complete: true, items: [remote] });
   const calls = [];
   const hybrid = {
@@ -97,7 +97,7 @@ test("adding a local song snapshots the current merged playlist before anchoring
     libraryService: library,
     hybridService: hybrid,
   });
-  const track = { id: "new-local", uri: "spool:local:new-local", title: "New local" };
+  const track = { id: "new-local", uri: "spoot:local:new-local", title: "New local" };
 
   await service.setMembership(library.sources[1], track, true);
   assert.deepEqual(calls, [

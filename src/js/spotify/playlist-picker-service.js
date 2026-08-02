@@ -112,7 +112,7 @@ export class SpotifyPlaylistPickerService {
 
   async createPlaylist(
     nameOrOptions,
-    { isPublic = false, description = "Created in Spool", signal } = {},
+    { isPublic = false, description = "Created in Spoot", signal } = {},
   ) {
     const options = typeof nameOrOptions === "object"
       ? nameOrOptions
@@ -164,18 +164,18 @@ function membershipKey(source, uri) {
 }
 
 function assertPlayableTrackUri(uri) {
-  if (typeof uri !== "string" || !/^(?:spotify:track|spool:local):[^:\s]+$/u.test(uri)) {
-    throw new TypeError("Only Spotify or Spool local songs can be added to playlists.");
+  if (typeof uri !== "string" || !/^(?:spotify:track|spoot:local):[^:\s]+$/u.test(uri)) {
+    throw new TypeError("Only Spotify or Spoot local songs can be added to playlists.");
   }
   return uri;
 }
 
 function isLocalUri(uri) {
-  return String(uri || "").startsWith("spool:local:");
+  return String(uri || "").startsWith("spoot:local:");
 }
 
 function localId(uri) {
-  return /^spool:local:(.+)$/u.exec(String(uri || ""))?.[1] || null;
+  return /^spoot:local:(.+)$/u.exec(String(uri || ""))?.[1] || null;
 }
 
 function nextOffset(page, currentOffset) {

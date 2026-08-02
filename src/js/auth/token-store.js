@@ -1,4 +1,4 @@
-export const DEFAULT_TOKEN_STORAGE_KEY = "spool.auth.tokens";
+export const DEFAULT_TOKEN_STORAGE_KEY = "spoot.auth.tokens";
 export const SPOTIFY_REFRESH_TOKEN_LIFETIME_MONTHS = 6;
 
 function nowFrom(clock) {

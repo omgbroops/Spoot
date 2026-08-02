@@ -25,7 +25,7 @@ class FakeAudio {
 
 const TRACKS = ["one", "two", "three"].map((id, index) => ({
   id,
-  uri: `spool:local:${id}`,
+  uri: `spoot:local:${id}`,
   title: id,
   artist: "Local Artist",
   artistNames: ["Local Artist"],
@@ -61,13 +61,13 @@ test("local playback uses one audio element, supports speed, and keeps local con
   await new Promise((resolve) => setImmediate(resolve));
 
   assert.equal(audio.playbackRate, 1.25);
-  assert.equal(states.at(-1).itemUri, "spool:local:one");
+  assert.equal(states.at(-1).itemUri, "spoot:local:one");
   assert.equal(states.at(-1).isPlaying, true);
   assert.deepEqual(queues.at(-1).upcoming.map((item) => item.localId), ["two", "three"]);
 
   await controller.next();
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(states.at(-1).itemUri, "spool:local:two");
+  assert.equal(states.at(-1).itemUri, "spoot:local:two");
   await controller.previous();
   assert.equal(states.at(-1).positionMs, 0);
   controller.destroy();

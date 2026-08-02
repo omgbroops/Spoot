@@ -92,7 +92,7 @@ export function openModal(idOrElement, options = {}) {
   getElements().scrim?.classList.add('show');
   document.body.classList.add('modal-open');
   requestAnimationFrame(() => modal.querySelector('[data-close], button, input')?.focus({ preventScroll: true }));
-  document.dispatchEvent(new CustomEvent('spool:modal-open', { detail: { id: modal.id } }));
+  document.dispatchEvent(new CustomEvent('spoot:modal-open', { detail: { id: modal.id } }));
   return true;
 }
 
@@ -107,7 +107,7 @@ export function closeModals(options = {}) {
   activeModal = undefined;
   if (options.restoreFocus !== false && lastOpener instanceof HTMLElement) lastOpener.focus({ preventScroll: true });
   lastOpener = undefined;
-  if (modal) document.dispatchEvent(new CustomEvent('spool:modal-close', { detail: { id: modal.id } }));
+  if (modal) document.dispatchEvent(new CustomEvent('spoot:modal-close', { detail: { id: modal.id } }));
 }
 
 export function toggleModal(idOrElement, options = {}) {

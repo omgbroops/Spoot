@@ -13,7 +13,7 @@ export const SPOTIFY_AUTHORIZE_ENDPOINT =
   "https://accounts.spotify.com/authorize";
 export const SPOTIFY_TOKEN_ENDPOINT =
   "https://accounts.spotify.com/api/token";
-export const DEFAULT_OAUTH_TRANSACTION_KEY = "spool.auth.pkce";
+export const DEFAULT_OAUTH_TRANSACTION_KEY = "spoot.auth.pkce";
 export const DEFAULT_TOKEN_EXPIRY_SKEW_MS = 60_000;
 export const DEFAULT_OAUTH_TRANSACTION_TTL_MS = 10 * 60 * 1000;
 export const DEFAULT_MAX_PENDING_OAUTH_TRANSACTIONS = 4;

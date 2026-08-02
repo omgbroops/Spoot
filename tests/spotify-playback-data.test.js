@@ -41,7 +41,7 @@ const episode = {
     id: "show-1",
     uri: "spotify:show:show-1",
     name: "Playback Notes",
-    publisher: "Spool Radio",
+    publisher: "Spoot Radio",
   },
 };
 
@@ -50,7 +50,7 @@ test("API playback normalization preserves metadata, device state, and restricti
     {
       device: {
         id: "device-1",
-        name: "Spool",
+        name: "Spoot",
         type: "computer",
         is_active: true,
         is_restricted: true,
@@ -110,7 +110,7 @@ test("SDK playback normalization handles episodes, repeat mode, and paused inter
   assert.equal(state.device.id, "device-sdk");
   assert.equal(state.contentType, "episode");
   assert.equal(state.title, "How the Queue Works");
-  assert.deepEqual(state.artistNames, ["Spool Radio"]);
+  assert.deepEqual(state.artistNames, ["Spoot Radio"]);
   assert.equal(state.albumName, "Playback Notes");
   assert.equal(state.repeatMode, "track");
   assert.equal(state.paused, true);
@@ -133,7 +133,7 @@ test("queue normalization handles a null current item plus track and episode row
   assert.equal(queue.upcoming.length, 2);
   assert.equal(queue.upcoming[0].index, 0);
   assert.equal(queue.upcoming[1].type, "episode");
-  assert.equal(queue.upcoming[1].artist, "Spool Radio");
+  assert.equal(queue.upcoming[1].artist, "Spoot Radio");
   assert.equal(queue.receivedAt, 20);
 });
 

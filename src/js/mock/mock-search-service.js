@@ -23,13 +23,13 @@ export class MockSearchService {
           browseable: true,
         };
       });
-    const albums = !needle || "afterimage spool mock artists silver thread".includes(needle)
+    const albums = !needle || "afterimage spoot mock artists silver thread".includes(needle)
       ? [
           {
             id: "mock-album",
             type: "album",
             title: "Afterimage",
-            subtitle: "Spool Mock Artists · 2 tracks",
+            subtitle: "Spoot Mock Artists · 2 tracks",
             artworkUrl: MOCK_TRACKS[0]?.artworkUrl || null,
             contextUri: "spotify:album:mockalbum",
             externalUrl: null,
@@ -40,7 +40,7 @@ export class MockSearchService {
             id: "mock-single",
             type: "album",
             title: "Silver Thread",
-            subtitle: "Spool Mock Artists · 1 track",
+            subtitle: "Spoot Mock Artists · 1 track",
             artworkUrl: MOCK_TRACKS[0]?.artworkUrl || null,
             contextUri: "spotify:album:mocksingle",
             externalUrl: null,
@@ -49,11 +49,11 @@ export class MockSearchService {
           },
         ]
       : [];
-    const artists = !needle || "spool mock artists".includes(needle)
+    const artists = !needle || "spoot mock artists".includes(needle)
       ? [{
           id: "mock-artist",
           type: "artist",
-          title: "Spool Mock Artists",
+          title: "Spoot Mock Artists",
           subtitle: "Artist",
           artworkUrl: MOCK_TRACKS[0]?.artworkUrl || null,
           contextUri: "spotify:artist:mockartist",

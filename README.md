@@ -1,6 +1,6 @@
-# Spool
+# Spoot
 
-Spool is a personal, non-commercial Spotify player for people who want the
+Spoot is a personal, non-commercial Spotify player for people who want the
 music without the feed. It turns the browser into a Spotify Connect device and
 keeps the original player's monochrome liquid-glass interface: floating Now
 Playing and queue widgets, compact transport controls, and an immersive view.
@@ -11,7 +11,7 @@ backend, or Spotify Client Secret.
 ## What works
 
 - Spotify Authorization Code with PKCE and session restoration
-- automatic registration of a Web Playback SDK device named `Spool`
+- automatic registration of a Web Playback SDK device named `Spoot`
 - a device-aware **Listen here** handoff and custom Spotify Connect picker
 - play/pause, previous/next, seeking, and repeat; shuffle is intentionally disabled while hybrid local/Spotify ordering is active
 - live browser volume, Media Session metadata, and optional media-key skipping
@@ -24,12 +24,12 @@ backend, or Spotify Client Secret.
 - session-only bounded caches for search, the playlist list, opened playlist
   contents, and Liked Songs; explicit refresh controls bypass the cache
 - an Add to playlist picker with client-side filtering, lazy membership checks,
-  Spotify and Spool-only Liked Songs support, and a separate full Create Playlist form
+  Spotify and Spoot-only Liked Songs support, and a separate full Create Playlist form
 - owned-playlist editing for name, description, privacy, custom cover, song
   removal, and drag-to-reorder with Spotify snapshot-aware rollback
 - a separate Local Files collection backed by IndexedDB, with imports from the
   computer or Dropbox, isolated browser-audio playback, and client-only placement
-  inside Spotify playlists and Spool's local Liked Songs overlay
+  inside Spotify playlists and Spoot's local Liked Songs overlay
 - playlist song counts, exact loaded duration, album names, and track durations
 - metadata-only display for followed playlists Spotify will not expose
 - Spotify catalog search across songs, artists, albums, and playlists
@@ -67,17 +67,17 @@ Use `scenario` to inspect specific states:
 
 ## Connect Spotify
 
-Spool's live player requires Spotify Premium. Development Mode also requires
+Spoot's live player requires Spotify Premium. Development Mode also requires
 the app owner to have Premium and limits the app to five allowlisted users; see
 Spotify's current [Development Mode rules](https://developer.spotify.com/documentation/web-api/concepts/quota-modes)
 and [Web Playback SDK requirements](https://developer.spotify.com/documentation/web-playback-sdk).
 The SDK currently requires `streaming`, `user-read-private`, and
-`user-read-email`; Spool requests the email scope for SDK authorization but
+`user-read-email`; Spoot requests the email scope for SDK authorization but
 does not read, display, or store the account's email address.
 Library access uses `user-library-read`, `playlist-read-private`, and
 `playlist-read-collaborative`. Adding/removing songs and creating or editing playlists also uses
 `user-library-modify`, `playlist-modify-private`, `playlist-modify-public`, and
-`ugc-image-upload` for custom playlist covers. Existing Spool sessions must log
+`ugc-image-upload` for custom playlist covers. Existing Spoot sessions must log
 out and authorize one more time after these scopes are added.
 
 1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
@@ -90,7 +90,7 @@ out and authorize one more time after these scopes are added.
 
 4. Replace `YOUR_SPOTIFY_CLIENT_ID` in `config.local.js` with the app's Client
    ID. A Client ID identifies a public browser app; it is not a secret. Do not
-   add a Client Secret anywhere in Spool.
+   add a Client Secret anywhere in Spoot.
 5. Start the server:
 
    ```powershell
@@ -98,11 +98,11 @@ out and authorize one more time after these scopes are added.
    ```
 
 6. Open [http://127.0.0.1:5173/](http://127.0.0.1:5173/), choose **Log in**,
-   and allow the Spotify sign-in popup. Spool keeps its original tab open so
+   and allow the Spotify sign-in popup. Spoot keeps its original tab open so
    the same in-memory authorization instance that created the temporary PKCE
    verifier can validate Spotify's callback. The popup hands the callback to
    that tab through a same-origin browser channel and closes after the token
-   exchange succeeds. Spool registers its browser player automatically without
+   exchange succeeds. Spoot registers its browser player automatically without
    stealing playback. If Spotify is active elsewhere, the banner names that
    device and offers **Listen here**; the same devices are available from the
    custom picker in Settings. If the browser blocks autoplay, press play once
@@ -110,7 +110,7 @@ out and authorize one more time after these scopes are added.
 
 The address bar should remain at the root URL. Query strings such as
 `?oauth=11` were temporary development cache busters and are not required;
-Spool removes that legacy parameter if it is present.
+Spoot removes that legacy parameter if it is present.
 
 Do not use `localhost`, a different port, or `file://`; Spotify compares the
 redirect URI exactly. The complete authenticated procedure is in
@@ -119,7 +119,7 @@ redirect URI exactly. The complete authenticated procedure is in
 
 ## Session cache and Local Files
 
-Spotify catalog data is cached only for the lifetime of the tab. Spool keeps a
+Spotify catalog data is cached only for the lifetime of the tab. Spoot keeps a
 bounded number of search results and recently opened detail pages, retains the
 playlist list once per session, and stores at most three fully opened Spotify
 collections. It does not preload every playlist. The refresh button in Library
@@ -127,17 +127,17 @@ reloads either the playlist list or the currently open collection from Spotify.
 
 Local Files are different: files selected from the computer or imported from
 Dropbox are user-provided media and are stored persistently in the
-`spool-local-media` IndexedDB database. Audio blobs are read only when a local
+`spoot-local-media` IndexedDB database. Audio blobs are read only when a local
 song is played, and artwork object URLs are capped so browsing local files does
 not grow memory without bound. Starting a local file pauses Spotify; starting a
 Spotify item pauses the local `<audio>` player.
 
 ## Hybrid playlists and lyrics
 
-Spotify remains authoritative for every Spotify song. Spool stores only local-file
+Spotify remains authoritative for every Spotify song. Spoot stores only local-file
 placements in IndexedDB, anchored between stable Spotify occurrences so duplicate
 tracks can still be distinguished. Dragging a Spotify row sends one Spotify reorder
-request; dragging a local row updates only Spool's overlay. Deleting a song from
+request; dragging a local row updates only Spoot's overlay. Deleting a song from
 Local Files removes its blob, metadata, lyrics, and every client-only placement.
 
 Hybrid playback follows the merged order and switches between the Web Playback SDK
@@ -146,9 +146,9 @@ open-ended queue, while an all-local overlay resumes the Spotify session that wa
 playing before it. Shuffle is disabled in this release because Spotify cannot shuffle
 files it does not know exist.
 
-Lyrics are stored in the `spool-lyrics` IndexedDB database. User edits have highest
+Lyrics are stored in the `spoot-lyrics` IndexedDB database. User edits have highest
 priority, then embedded local-file lyrics, then the previously selected LRCLIB result.
-Spool performs at most one automatic LRCLIB lookup per song and persists a negative
+Spoot performs at most one automatic LRCLIB lookup per song and persists a negative
 match; the LRCLIB button always allows a manual refresh.
 
 ## Tests
@@ -175,10 +175,10 @@ collaborates on. Followed Spotify/editorial/generated playlists that appear in
 to be empty.
 
 Search and album pages use Spotify's public catalog endpoints. Lyrics remain a
-fully serverless, best-effort browser integration: Spool sends plain GET
+fully serverless, best-effort browser integration: Spoot sends plain GET
 requests directly to [LRCLIB](https://lrclib.net/), prefers synchronized
 responses, and falls back to plain lyrics. Provider availability, local DNS
-filtering, and catalog coverage can vary. Spool never runs a local proxy or
+filtering, and catalog coverage can vary. Spoot never runs a local proxy or
 extracts Spotify Desktop credentials.
 
 The original local player is preserved, unchanged, under [`reference/`](./reference/README.md).

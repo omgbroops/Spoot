@@ -197,7 +197,7 @@ function playlistTrackRow(entry, playlist, index, currentUri) {
   duration.className = "library-track-duration";
   duration.textContent = formatTrackDuration(entry.durationMs);
   actions.className = "library-track-actions";
-  if (/^(?:spotify:track|spool:local):/u.test(entry.uri || "")) {
+  if (/^(?:spotify:track|spoot:local):/u.test(entry.uri || "")) {
     const add = document.createElement("button");
     add.type = "button";
     add.className = "track-action-button";

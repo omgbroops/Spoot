@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
-  <title>Spool</title>
+  <title>Spoot</title>
   <link rel="icon" href="./src/assets/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,7 +28,7 @@
       <span id="connection-message">Add your Spotify Client ID to begin.</span>
     </div>
     <div class="connection-actions">
-      <button class="btn primary" id="connection-primary" type="button">Set up Spool</button>
+      <button class="btn primary" id="connection-primary" type="button">Set up Spoot</button>
       <button class="btn" id="connection-secondary" type="button" hidden></button>
     </div>
   </section>
@@ -166,7 +166,7 @@
     <div class="modal-head" data-drag-handle><div class="modal-title" id="sound-title">Sound</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="modal-body">
       <div class="sound-capture-status" id="sound-capture-status">Spotify audio is not exposed to page capture</div>
-      <div class="setting volume-setting"><div class="setting-label">Spool volume <span class="val" id="vol-val">100%</span></div><input type="range" id="vol-range" min="0" max="1" step="0.01" value="1" disabled></div>
+      <div class="setting volume-setting"><div class="setting-label">Spoot volume <span class="val" id="vol-val">100%</span></div><input type="range" id="vol-range" min="0" max="1" step="0.01" value="1" disabled></div>
       <div class="setting"><div class="setting-label">Speed <span class="val" id="speed-val">1.00x</span></div><input type="range" id="speed-range" min="0.25" max="2.5" step="0.01" value="1"></div>
       <div class="setting"><div class="setting-label">Reverb <span class="val" id="rev-val">0%</span></div><input type="range" id="rev-range" min="0" max="1" step="0.01" value="0"></div>
       <div class="row-setting inactive-surface inactive-control" data-inactive-feature="Crossfade" data-inactive-message="Disabled."><div class="name">Crossfade</div><span class="val">Unavailable</span></div>
@@ -189,7 +189,7 @@
     <div class="modal-head" data-drag-handle><div class="modal-title" id="settings-title">Settings</div><button class="close-x" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="modal-body">
       <div class="setting-label">Spotify</div>
-      <div class="row-setting spotify-setting"><div><div class="name" id="spotify-account-status">Not connected</div><div class="setting-note" id="spotify-device-status">Spool device unavailable</div></div><div class="btn-row"><button class="btn primary" id="settings-connect" type="button">Log in</button><button class="btn" id="settings-transfer" type="button" hidden>Use Spool</button><button class="btn" id="settings-disconnect" type="button" hidden>Log out</button></div></div>
+      <div class="row-setting spotify-setting"><div><div class="name" id="spotify-account-status">Not connected</div><div class="setting-note" id="spotify-device-status">Spoot device unavailable</div></div><div class="btn-row"><button class="btn primary" id="settings-connect" type="button">Log in</button><button class="btn" id="settings-transfer" type="button" hidden>Use Spoot</button><button class="btn" id="settings-disconnect" type="button" hidden>Log out</button></div></div>
       <div class="device-picker" id="device-picker" hidden>
         <button class="device-trigger" id="device-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="device-list" aria-labelledby="device-trigger-label device-trigger-name">
           <span><span class="device-trigger-label" id="device-trigger-label">Listening device</span><strong id="device-trigger-name">Choose a listening device</strong></span>
@@ -198,7 +198,7 @@
         <div class="device-menu glass" id="device-list" role="listbox" aria-label="Spotify devices" hidden></div>
       </div>
       <div class="media-settings">
-        <div class="row-setting"><div><div class="name">Show song in media player</div><div class="setting-note">Share Spool playback with system media controls</div></div><button class="toggle on" id="tg-media" type="button" role="switch" aria-checked="true" aria-label="Show song in media player"></button></div>
+        <div class="row-setting"><div><div class="name">Show song in media player</div><div class="setting-note">Share Spoot playback with system media controls</div></div><button class="toggle on" id="tg-media" type="button" role="switch" aria-checked="true" aria-label="Show song in media player"></button></div>
         <div class="row-setting"><div><div class="name">Headphone click → skip</div><div class="setting-note">Enable previous and next media-key actions</div></div><button class="toggle" id="tg-clickskip" type="button" role="switch" aria-checked="false" aria-label="Headphone click skips tracks"></button></div>
       </div>
       <div class="legacy-settings">
@@ -294,10 +294,10 @@
     </div>
   </section>
 
-  <section class="command-palette" id="command-palette" role="dialog" aria-modal="false" aria-hidden="true" aria-label="Spool command line">
+  <section class="command-palette" id="command-palette" role="dialog" aria-modal="false" aria-hidden="true" aria-label="Spoot command line">
     <form id="command-form" autocomplete="off">
       <span class="command-prompt" aria-hidden="true">›</span>
-      <input id="command-input" type="text" autocomplete="off" spellcheck="false" placeholder="Type a command…" aria-label="Type a Spool command">
+      <input id="command-input" type="text" autocomplete="off" spellcheck="false" placeholder="Type a command…" aria-label="Type a Spoot command">
       <kbd>Esc</kbd>
     </form>
     <div class="command-output" id="command-output" aria-live="polite"></div>

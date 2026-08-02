@@ -89,7 +89,7 @@ export function renderDevicePicker({
   devices = [],
   activeDeviceId = null,
   activeDeviceName = null,
-  spoolDeviceId = null,
+  spootDeviceId = null,
   loading = false,
   loggedIn = false,
 } = {}) {
@@ -101,7 +101,7 @@ export function renderDevicePicker({
   const active = devices.find((device) => device.id === activeDeviceId);
   deviceTriggerName.textContent = loading
     ? 'Checking devices…'
-    : active?.name || activeDeviceName || (activeDeviceId === spoolDeviceId ? 'Spool' : 'Choose a listening device');
+    : active?.name || activeDeviceName || (activeDeviceId === spootDeviceId ? 'Spoot' : 'Choose a listening device');
   deviceTrigger.disabled = loading;
   deviceList.replaceChildren();
 
@@ -131,7 +131,7 @@ export function renderDevicePicker({
     option.append(deviceIcon(device.type));
     copy.className = 'device-option-copy';
     name.textContent = device.name || 'Unnamed Spotify device';
-    meta.textContent = device.id === spoolDeviceId
+    meta.textContent = device.id === spootDeviceId
       ? 'This browser'
       : unavailable
         ? 'Unavailable to Spotify Connect'

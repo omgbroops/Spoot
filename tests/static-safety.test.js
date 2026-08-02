@@ -36,8 +36,8 @@ test("local audio is isolated from the Spotify runtime and stores only user-impo
     .join("\n");
 
   assert.doesNotMatch(spotifyRuntime, /\bnew\s+(?:window\.)?Audio\s*\(/);
-  assert.match(localRuntime, /spool-local-media/u);
-  assert.match(localRuntime, /spool:local:/u);
+  assert.match(localRuntime, /spoot-local-media/u);
+  assert.match(localRuntime, /spoot:local:/u);
   assert.doesNotMatch(localRuntime, /api\.spotify\.com|sdk\.scdn\.co/iu);
   assert.doesNotMatch(`${spotifyRuntime}\n${localRuntime}`, /indexedDB\.open\s*\(\s*["']musicplayer["']/);
   assert.doesNotMatch(`${spotifyRuntime}\n${localRuntime}`, /\bclient_secret\b/i);

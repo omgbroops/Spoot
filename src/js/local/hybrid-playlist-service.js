@@ -1,4 +1,4 @@
-const DB_NAME = "spool-hybrid-playlists";
+const DB_NAME = "spoot-hybrid-playlists";
 const DB_VERSION = 1;
 const OVERLAYS = "overlays";
 const LIKED_SOURCE_ID = "liked-songs";
@@ -57,7 +57,7 @@ export class HybridPlaylistService {
     const trackId = String(localId || "").trim();
     if (!trackId) throw new TypeError("A local track ID is required.");
     const exists = await this.localLibrary.getTrack(trackId, { withCover: false });
-    if (!exists) throw new Error("That local song is no longer stored in Spool.");
+    if (!exists) throw new Error("That local song is no longer stored in Spoot.");
 
     const overlay = await this.getOverlay(id);
     const already = overlay.placements.some((placement) => placement.localId === trackId);
@@ -197,7 +197,7 @@ export class HybridPlaylistService {
 export function annotateSpotifyOccurrences(items = []) {
   const counts = new Map();
   return (items || []).map((entry, index) => {
-    if (entry?.hybridKind === "local" || String(entry?.uri || "").startsWith("spool:local:")) return entry;
+    if (entry?.hybridKind === "local" || String(entry?.uri || "").startsWith("spoot:local:")) return entry;
     const uri = String(entry?.uri || entry?.item?.uri || `missing:${index}`);
     const addedAt = String(entry?.addedAt || entry?.added_at || entry?.item?.addedAt || "");
     const addedBy = String(entry?.addedBy?.id || entry?.added_by?.id || entry?.item?.addedBy?.id || "");
@@ -253,7 +253,7 @@ export function localEntry(track) {
 }
 
 export function isLocalEntry(entry) {
-  return Boolean(entry?.hybridKind === "local" || entry?.isLocal || String(entry?.uri || "").startsWith("spool:local:"));
+  return Boolean(entry?.hybridKind === "local" || entry?.isLocal || String(entry?.uri || "").startsWith("spoot:local:"));
 }
 
 export function makeRoomForPrependedPlacement(placements = []) {
@@ -295,11 +295,11 @@ export function hybridUpcomingItems(items, currentIndex, { repeatMode = "off" } 
 }
 
 function localReference(localId) {
-  return { localId, uri: `spool:local:${localId}`, hybridKind: "local", hybridKey: `local:${localId}`, isLocal: true };
+  return { localId, uri: `spoot:local:${localId}`, hybridKind: "local", hybridKey: `local:${localId}`, isLocal: true };
 }
 
 function localIdFromEntry(entry) {
-  return entry?.id || /^spool:local:(.+)$/u.exec(String(entry?.uri || ""))?.[1] || null;
+  return entry?.id || /^spoot:local:(.+)$/u.exec(String(entry?.uri || ""))?.[1] || null;
 }
 
 function findSpotify(items, start, direction) {

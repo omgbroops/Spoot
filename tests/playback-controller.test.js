@@ -60,7 +60,7 @@ class FakeSdk extends Emitter {
     this.ready = false;
   }
 
-  becomeReady(deviceId = "spool-device") {
+  becomeReady(deviceId = "spoot-device") {
     this.ready = true;
     this.emit("ready", { deviceId });
   }
@@ -79,8 +79,8 @@ function createApi() {
       stateOptions.push(options);
       return {
         device: {
-          id: "spool-device",
-          name: "Spool",
+          id: "spoot-device",
+          name: "Spoot",
           is_active: true,
           is_restricted: false,
         },
@@ -100,7 +100,7 @@ function createApi() {
       calls.push("get-devices");
       return {
         devices: [
-          { id: "spool-device", name: "Spool", type: "Computer", is_active: true, is_restricted: false },
+          { id: "spoot-device", name: "Spoot", type: "Computer", is_active: true, is_restricted: false },
           { id: "phone-device", name: "Phone", type: "Smartphone", is_active: false, is_restricted: false },
         ],
       };
@@ -156,7 +156,7 @@ test("controller connects once, hydrates state, and transfers only on user actio
 
   sdk.becomeReady();
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(controller.deviceId, "spool-device");
+  assert.equal(controller.deviceId, "spoot-device");
   assert.equal(controller.playbackState.title, "Signal Path");
   assert.equal(controller.playbackState.activeDevice, true);
   assert.equal(typeof controller.playbackState.authoritativeAt, "number");
@@ -165,7 +165,7 @@ test("controller connects once, hydrates state, and transfers only on user actio
   await controller.transferHere();
   assert.deepEqual(
     api.calls.find((call) => Array.isArray(call) && call[0] === "transfer"),
-    ["transfer", "spool-device", { play: false }],
+    ["transfer", "spoot-device", { play: false }],
   );
   assert.equal(sdk.calls.filter((call) => call === "activate").length, 1);
   assert.ok(queueService.refreshCalls >= 2);
@@ -262,7 +262,7 @@ test("null SDK state falls back to one dedupable API reconciliation", async () =
   );
 });
 
-test("controller lists devices, transfers externally, plays a queue song in Spool, and controls SDK volume", async () => {
+test("controller lists devices, transfers externally, plays a queue song in Spoot, and controls SDK volume", async () => {
   const sdk = new FakeSdk();
   const api = createApi();
   const controller = new PlaybackController({
@@ -324,7 +324,7 @@ test("playlist playback keeps its context while queue clicks advance Spotify's r
   });
   const contextualStart = api.calls.find((call) => Array.isArray(call) && call[0] === "start");
   assert.deepEqual(contextualStart[1], {
-    deviceId: "spool-device",
+    deviceId: "spoot-device",
     contextUri: "spotify:playlist:playlist-1",
     offset: { position: 7 },
     positionMs: 0,

@@ -129,12 +129,12 @@ import {
   setupCommandPalette,
 } from "./ui/command-palette.js?v=20260724-command2";
 
-const UI_PREFERENCES_KEY = "spool.ui.preferences";
-const OAUTH_POPUP_NAME = "spool-spotify-auth";
-const OAUTH_CHANNEL_NAME = "spool:oauth";
-const OAUTH_COMPLETE_MESSAGE = "spool:oauth-complete";
-const OAUTH_CALLBACK_MESSAGE = "spool:oauth-callback";
-const OAUTH_RESULT_MESSAGE = "spool:oauth-result";
+const UI_PREFERENCES_KEY = "spoot.ui.preferences";
+const OAUTH_POPUP_NAME = "spoot-spotify-auth";
+const OAUTH_CHANNEL_NAME = "spoot:oauth";
+const OAUTH_COMPLETE_MESSAGE = "spoot:oauth-complete";
+const OAUTH_CALLBACK_MESSAGE = "spoot:oauth-callback";
+const OAUTH_RESULT_MESSAGE = "spoot:oauth-result";
 const MOCK_SCENARIOS = new Set([
   "default",
   "paused",
@@ -257,11 +257,11 @@ window.addEventListener("storage", (event) => {
 });
 
 await initialize().catch((error) => {
-  console.error("Spool initialization failed.", safeDiagnostic(error));
+  console.error("Spoot initialization failed.", safeDiagnostic(error));
   renderConnection("error", {
-    message: "Spool could not start. Check the console for a redacted diagnostic.",
+    message: "Spoot could not start. Check the console for a redacted diagnostic.",
   });
-  showToast("Spool could not start.");
+  showToast("Spoot could not start.");
 });
 
 async function initialize() {
@@ -326,7 +326,7 @@ async function initialize() {
     auth.logout();
     renderLoggedOut();
     renderConnection("logged-out", {
-      message: "Spool added library permissions. Log in once more to approve the update.",
+      message: "Spoot added library permissions. Log in once more to approve the update.",
     });
     return;
   }
@@ -375,7 +375,7 @@ function setupUi() {
   renderImmersive({ emptyMessage: "Connect Spotify to start" });
   renderLyrics({ status: "disconnected" });
   renderQueue({ status: "disconnected" });
-  setPlaybackControlsEnabled(false, "Connect the Spool player first");
+  setPlaybackControlsEnabled(false, "Connect the Spoot player first");
 
   bindPlaybackButtons();
   setupQueue({ onPlay: playQueueItem, onAddToPlaylist: openPlaylistPicker });
@@ -498,7 +498,7 @@ function setupUi() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") reconcilePlayback();
   });
-  document.addEventListener("spool:modal-open", ({ detail }) => {
+  document.addEventListener("spoot:modal-open", ({ detail }) => {
     if (detail?.id === "modal-library") refreshLibrary();
     if (detail?.id === "modal-search") {
       renderCatalogCurrent({ animate: false });
@@ -509,7 +509,7 @@ function setupUi() {
     if (detail?.id === "modal-playlist") focusPlaylistPicker();
     if (detail?.id === "modal-dropbox") renderDropbox({ connected: Boolean(dropboxService?.connected) });
   });
-  document.addEventListener("spool:modal-close", ({ detail }) => {
+  document.addEventListener("spoot:modal-close", ({ detail }) => {
     if (detail?.id === "modal-library" && cancelLibraryRequest()) {
       selectedLibrarySource = null;
       selectedLibraryItems = [];
@@ -646,7 +646,7 @@ async function initializeMockMode() {
   lyricsService = new MockLyricsService();
   bindController(controller);
   renderConnection("logged-in", {
-    title: "Spool mock mode",
+    title: "Spoot mock mode",
     message: "No Spotify credentials or requests are used in mock mode.",
   });
 
@@ -662,13 +662,13 @@ async function initializeMockMode() {
 
     renderConnection("active", {
       hidden: true,
-      title: "Spool mock mode",
+      title: "Spoot mock mode",
       message: `Scenario: ${scenario}. No Spotify requests are being made.`,
     });
   } catch (error) {
     const state = scenario === "auth-error" ? "authorization-expired" : "error";
     renderConnection(state, {
-      title: "Spool mock mode",
+      title: "Spoot mock mode",
       message: humanizeError(error),
     });
   }
@@ -790,10 +790,10 @@ function renderPlayback(playback) {
   const enabled = Boolean(playback?.activeDevice && hasItem);
   setPlaybackControlsEnabled(
     enabled,
-    hasItem ? "Use Spool as the active device first" : "Start a track in Spotify first",
+    hasItem ? "Use Spoot as the active device first" : "Start a track in Spotify first",
   );
 
-  document.title = playback?.title ? `${playback.title} — Spool` : "Spool";
+  document.title = playback?.title ? `${playback.title} — Spoot` : "Spoot";
   if (selectedLibrarySource) renderSelectedLibrary();
   if (catalogCurrent?.kind && catalogCurrent.kind !== "search" && isModalOpen("modal-search")) {
     renderCatalogCurrent({ animate: false });
@@ -838,8 +838,8 @@ function renderSteadyConnection(status = {}) {
   renderConnection(controller?.deviceId ? "player-ready" : "logged-in", {
     title: controller?.deviceId ? "No active Spotify device" : "Spotify connected",
     message: controller?.deviceId
-      ? "Choose Listen here to start using Spool."
-      : status.message || "Preparing the Spool browser player…",
+      ? "Choose Listen here to start using Spoot."
+      : status.message || "Preparing the Spoot browser player…",
     primaryLabel: controller?.deviceId ? "Listen here" : "Connecting…",
     primaryDisabled: !controller?.deviceId,
     onPrimary: transferHere,
@@ -896,11 +896,11 @@ function renderSettings(status = {}) {
     accountText: config?.mock ? "Mock session" : loggedIn ? "Spotify connected" : "Not connected",
     deviceText: controller?.deviceId
       ? spotifyPlayback?.activeDevice
-        ? "Spool is the active device"
+        ? "Spoot is the active device"
         : spotifyPlayback?.device?.isActive
           ? `Listening on ${spotifyPlayback.device.name || "another device"}`
-          : "Spool device ready"
-      : status.message || "Spool device unavailable",
+          : "Spoot device ready"
+      : status.message || "Spoot device unavailable",
     transfer: {
       label: "Listen here",
       onClick: transferHere,
@@ -915,7 +915,7 @@ function renderSettings(status = {}) {
     devices: currentDevices,
     activeDeviceId: spotifyPlayback?.device?.isActive ? spotifyPlayback.device.id : null,
     activeDeviceName: spotifyPlayback?.device?.isActive ? spotifyPlayback.device.name : null,
-    spoolDeviceId: controller?.deviceId ?? null,
+    spootDeviceId: controller?.deviceId ?? null,
     loading: connectionState === "loading-sdk" || connectionState === "connecting-player",
     loggedIn,
   });
@@ -991,7 +991,7 @@ async function handleOAuthCallbackMessage(data, source = null) {
   const ownsTransaction = Boolean(
     callbackState && auth.readTransaction(callbackState),
   );
-  // Broadcasts reach every open Spool tab. Only the tab whose sessionStorage
+  // Broadcasts reach every open Spoot tab. Only the tab whose sessionStorage
   // owns this state may exchange it. A direct popup message can still surface
   // a precise missing-transaction error instead of hanging silently.
   if (!ownsTransaction && !source) return;
@@ -1007,7 +1007,7 @@ async function handleOAuthCallbackMessage(data, source = null) {
     if (!auth.hasGrantedScopes(config.scopes)) {
       auth.logout();
       throw new SpotifyAuthError(
-        "Spotify did not grant every permission required by Spool.",
+        "Spotify did not grant every permission required by Spoot.",
         { code: "insufficient_scope" },
       );
     }
@@ -1156,7 +1156,7 @@ async function transferHere() {
     await controller.transferHere();
     renderSteadyConnection();
     if (!controller.playbackState?.item) {
-      showToast("Spool is ready. Start a track in Spotify, then press play here once if needed.", { duration: 4200 });
+      showToast("Spoot is ready. Start a track in Spotify, then press play here once if needed.", { duration: 4200 });
     } else if (!controller.playbackState?.isPlaying) {
       showToast("Press play once if the browser is waiting for audio permission.", { duration: 3600 });
     }
@@ -1200,7 +1200,7 @@ async function transferToDevice(deviceId) {
   try {
     await controller.transferToDevice(deviceId);
     renderSteadyConnection();
-    showToast(deviceId === controller.deviceId ? "Listening through Spool." : "Spotify device changed.");
+    showToast(deviceId === controller.deviceId ? "Listening through Spoot." : "Spotify device changed.");
   } catch (error) {
     showToast(humanizeError(error));
   }
@@ -1240,7 +1240,7 @@ async function playTrackNow(selection) {
   }
 
   if (!controller?.playNow) {
-    showToast("Log in and wait for the Spool browser player to connect.");
+    showToast("Log in and wait for the Spoot browser player to connect.");
     return;
   }
   hybridSession = null;
@@ -1363,7 +1363,7 @@ async function playHybridIndex(index, { fromEnded = false } = {}) {
     } else {
       await activateSpotifyPlayback();
       await controller.playNow(item.uri, {
-        // A Spotify context cannot contain Spool's client-only local rows.
+        // A Spotify context cannot contain Spoot's client-only local rows.
         // Start exactly one remote item and let the hybrid session own every
         // transition so natural endings, skips, previous, and repeat agree.
         uris: [item.uri],
@@ -1744,7 +1744,7 @@ function humanizeCatalogError(kind, error) {
   if (kind === "artist") return humanizeArtistError(error);
   if (kind === "track") return humanizeTrackError(error);
   if (error instanceof SpotifyApiError && error.status === 403) {
-    return "Spotify returned the playlist metadata but does not allow Spool to read its songs.";
+    return "Spotify returned the playlist metadata but does not allow Spoot to read its songs.";
   }
   return humanizeError(error);
 }
@@ -2199,12 +2199,12 @@ async function refreshLocalFilesAfterImport(count = 0) {
 async function openPlaylistPicker(track) {
   playlistPickerCreateOnly = false;
   const uri = track?.uri || "";
-  playlistPickerTrack = track && /^(?:spotify:track|spool:local):/u.test(uri) ? {
+  playlistPickerTrack = track && /^(?:spotify:track|spoot:local):/u.test(uri) ? {
     id: track.id || track.localId || uri.split(":").pop(),
     localId: track.localId || localIdFromUri(uri),
     uri,
     title: track.title || "Song",
-    isLocal: uri.startsWith("spool:local:"),
+    isLocal: uri.startsWith("spoot:local:"),
   } : null;
   if (!playlistPickerTrack) {
     showToast("Choose a song before adding it to a playlist.");
@@ -2425,7 +2425,7 @@ async function reorderMergedPlaylist(playlistId, fromIndex, toIndex, { items, pl
     if (isLocalEntry(moved)) {
       await hybridService.saveMergedOrder(playlistId, reordered);
     } else {
-      if (!playlist?.canModifyItems) throw new Error("Spotify does not allow Spool to reorder this playlist.");
+      if (!playlist?.canModifyItems) throw new Error("Spotify does not allow Spoot to reorder this playlist.");
       const originalSpotify = original.filter((item) => !isLocalEntry(item));
       const reorderedSpotify = reordered.filter((item) => !isLocalEntry(item));
       const remoteOrderChanged = originalSpotify.some((item, index) => item !== reorderedSpotify[index]);
@@ -2476,7 +2476,7 @@ async function removeMergedPlaylistItem(playlistId, index, { items, playlist } =
     } else if (playlistId === "liked-songs") {
       await playlistPickerService.setMembership({ id: "liked-songs", kind: "liked", name: "Liked Songs" }, entry, false);
     } else {
-      if (!playlist?.canModifyItems) throw new Error("Spotify does not allow Spool to remove songs from this playlist.");
+      if (!playlist?.canModifyItems) throw new Error("Spotify does not allow Spoot to remove songs from this playlist.");
       await playlistService.removeItem(playlistId, entry, { snapshotId: playlist.snapshotId || null });
       await hybridService.saveMergedOrder(playlistId, next);
     }
@@ -2507,7 +2507,7 @@ function applyMergedItemsToVisiblePlaylist(playlistId, items) {
 async function deleteLocalTrack(localId) {
   const track = localTracks.find((item) => item.id === localId);
   if (!track) return;
-  if (!confirm(`Delete “${track.title}” from Local Files and every Spool playlist?`)) return;
+  if (!confirm(`Delete “${track.title}” from Local Files and every Spoot playlist?`)) return;
   try {
     if (currentPlayback?.itemUri === track.uri) await localController?.pause?.();
     await Promise.all([
@@ -2767,7 +2767,7 @@ function bindPlaybackButtons() {
   for (const shuffle of [elements.shuffle, elements.immersiveShuffle].filter(Boolean)) {
     shuffle.disabled = true;
     shuffle.setAttribute("aria-disabled", "true");
-    shuffle.title = "Shuffle is disabled while Spool develops hybrid playlist playback";
+    shuffle.title = "Shuffle is disabled while Spoot develops hybrid playlist playback";
   }
   bindCommand([elements.repeat, elements.immersiveRepeat], cycleRepeatPlayback);
 }
@@ -2839,7 +2839,7 @@ async function executeCommand(command) {
   const requirePlayback = () => {
     const target = activeController();
     if (!target || !currentPlayback?.activeDevice) {
-      throw new Error("Choose a local song or use Spool as the active Spotify device first.");
+      throw new Error("Choose a local song or use Spoot as the active Spotify device first.");
     }
     return target;
   };
@@ -2880,7 +2880,7 @@ async function executeCommand(command) {
     return;
   }
   if (name === "shuffle") {
-    throw new Error("Shuffle is temporarily disabled while Spool develops hybrid playlist playback.");
+    throw new Error("Shuffle is temporarily disabled while Spoot develops hybrid playlist playback.");
   }
   if (name === "repeat") {
     requirePlayback();
@@ -2971,7 +2971,7 @@ async function executeDeviceCommand(argument) {
     await refreshDevices();
     return;
   }
-  if (["spool", "here", "browser"].includes(query)) return transferHere();
+  if (["spoot", "here", "browser"].includes(query)) return transferHere();
   if (!currentDevices.length) await refreshDevices();
   const device = currentDevices.find((candidate) => candidate.name?.toLowerCase().includes(query));
   if (!device) throw new Error(`No Spotify device matched “${argument}”.`);
@@ -3090,7 +3090,7 @@ function bindKeyboard() {
 
 async function runKeyboardCommand(command) {
   if (!activeController() || !currentPlayback?.activeDevice) {
-    showToast("Choose a local song or use Spool as the active Spotify device first.");
+    showToast("Choose a local song or use Spoot as the active Spotify device first.");
     return;
   }
   try {
@@ -3300,14 +3300,14 @@ function humanizeError(error) {
   if (error instanceof SpotifyAuthError) {
     if (error.code === "access_denied") return "Spotify authorization was denied.";
     if (error.code === "insufficient_scope") {
-      return "Spotify did not grant every permission Spool needs. Log in and approve all requested access.";
+      return "Spotify did not grant every permission Spoot needs. Log in and approve all requested access.";
     }
     if (error.code === "invalid_state") {
       if (error.details?.reason === "missing_transaction") {
-        return "Spotify returned, but this tab lost the temporary login verifier. Close other Spool tabs, reload, and try again.";
+        return "Spotify returned, but this tab lost the temporary login verifier. Close other Spoot tabs, reload, and try again.";
       }
       if (error.details?.reason === "state_mismatch") {
-        return "Spotify returned a different login state. Close other Spool tabs, reload, and try again.";
+        return "Spotify returned a different login state. Close other Spoot tabs, reload, and try again.";
       }
       return "Spotify sign-in returned without its verification state. Please reload and try again.";
     }

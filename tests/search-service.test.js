@@ -52,7 +52,7 @@ test("albums without a real Spotify ID remain visible but cannot open a fake pag
   assert.match(results.albums[0].id, /^album-unavailable-/u);
 });
 
-test("search service requests all supported Spool result groups with the current limit", async () => {
+test("search service requests all supported Spoot result groups with the current limit", async () => {
   let observed;
   const signal = new AbortController().signal;
   const service = new SpotifySearchService({

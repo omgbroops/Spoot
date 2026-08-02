@@ -149,7 +149,7 @@ export function renderLibrarySources({ status = "ready", sources = [], message }
 
   const note = document.createElement("p");
   note.className = "library-api-note";
-  note.textContent = "Spotify playlists are loaded only when opened. Local Files and Spool-only placements stay in this browser.";
+  note.textContent = "Spotify playlists are loaded only when opened. Local Files and Spoot-only placements stay in this browser.";
   content.append(note);
   if (lastSourceId) scheduleFocus(() => (
     [...content.querySelectorAll("[data-library-source]")]
@@ -277,7 +277,7 @@ function trackRow(entry, source, index, currentUri) {
   const duration = document.createElement("span");
   const actions = document.createElement("span");
   const playable = Boolean(entry.playable && entry.uri);
-  const local = Boolean(entry.isLocal || String(entry.uri || "").startsWith("spool:local:"));
+  const local = Boolean(entry.isLocal || String(entry.uri || "").startsWith("spoot:local:"));
   const canModify = source.kind === "playlist" && (source.owned || source.collaborative);
   row.className = `library-track${playable ? "" : " unavailable"}${currentUri && entry.uri === currentUri ? " playing" : ""}`;
   row.title = entry.unavailableReason || `Play ${entry.title}`;
@@ -314,7 +314,7 @@ function trackRow(entry, source, index, currentUri) {
   duration.className = "library-track-duration";
   duration.textContent = formatTrackDuration(entry.durationMs);
   actions.className = "library-track-actions";
-  if (/^(?:spotify:track|spool:local):/u.test(entry.uri || "")) {
+  if (/^(?:spotify:track|spoot:local):/u.test(entry.uri || "")) {
     const add = actionButton("Add to playlist", plusIcon());
     add.dataset.libraryAddPlaylist = entry.uri;
     add.dataset.libraryTrackId = entry.id || "";

@@ -27,7 +27,7 @@ function normalizedTrack(track) {
     artist: track?.artist || track?.artistNames?.join(", ") || "",
     album: track?.albumName || track?.album?.name || "",
     durationMs: Math.max(0, Number(track?.durationMs || track?.duration_ms) || 0),
-    isLocal: Boolean(track?.isLocal || String(track?.uri || "").startsWith("spool:local:")),
+    isLocal: Boolean(track?.isLocal || String(track?.uri || "").startsWith("spoot:local:")),
     embeddedLyrics: String(track?.lyrics || ""),
   };
 }

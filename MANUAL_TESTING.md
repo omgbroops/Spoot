@@ -1,6 +1,6 @@
 # Authenticated Spotify manual test
 
-This is the final live-account check for Spool. The automated suite covers the
+This is the final live-account check for Spoot. The automated suite covers the
 PKCE helpers, token and API edge cases, state normalization, mock controller,
 UI plumbing, and the guard against starting the legacy audio engine. It cannot
 prove that a real Spotify account can authorize, that Spotify will provision a
@@ -19,12 +19,12 @@ These constraints were checked against Spotify's documentation on July 23,
   and each user must be added to the app's allowlist. An unallowlisted user may
   appear to log in but their API calls return `403`. Spotify documents this in
   [Quota modes](https://developer.spotify.com/documentation/web-api/concepts/quota-modes).
-- The account actually using Spool must have a Spotify Premium subscription;
+- The account actually using Spoot must have a Spotify Premium subscription;
   the Web Playback SDK does not support free accounts or mobile-only Premium
   plans. See the official [Web Playback SDK overview](https://developer.spotify.com/documentation/web-playback-sdk)
   and [SDK reference](https://developer.spotify.com/documentation/web-playback-sdk/reference).
 - Spotify's Web Playback SDK authorization guide currently requires
-  `streaming`, `user-read-private`, and `user-read-email`. Spool never reads or
+  `streaming`, `user-read-private`, and `user-read-email`. Spoot never reads or
   stores the account email; that scope is requested only because the SDK lists
   it as a browser-player prerequisite.
 - Library browsing additionally requires `user-library-read`,
@@ -56,7 +56,7 @@ prevent the SDK from loading. Spotify lists these browser issues in its
 Open the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard),
 create or select the app, and confirm its owner has Premium. Under **Users
 Management**, add the Spotify name and email for every account that will test
-Spool; Development Mode permits at most five authenticated users. The playback
+Spoot; Development Mode permits at most five authenticated users. The playback
 account itself must also be Premium.
 
 ### 2. Register the redirect URI
@@ -80,7 +80,7 @@ Copy-Item .\src\js\config.example.js .\src\js\config.local.js
 
 Open `src/js/config.local.js` and replace only
 `YOUR_SPOTIFY_CLIENT_ID`. Leave the redirect URI as
-`http://127.0.0.1:5173/` and the device name as `Spool` unless you intentionally
+`http://127.0.0.1:5173/` and the device name as `Spoot` unless you intentionally
 need a different display name. Never paste a Spotify Client Secret into this
 browser app. `config.local.js` is ignored by Git.
 
@@ -106,34 +106,34 @@ you on a blank player.
 
 Choose **Log in**, allow the popup for `127.0.0.1`, authenticate with an
 allowlisted Premium account, and approve the requested scopes. Keep the
-original Spool tab open while the popup is on Spotify. After Spotify redirects
+original Spoot tab open while the popup is on Spotify. After Spotify redirects
 the popup back:
 
-- the popup should close and the original Spool tab should remain at the exact
+- the popup should close and the original Spoot tab should remain at the exact
   loopback URL;
 - the original tab should never receive `code`, `state`, or other OAuth
   callback parameters in its address bar;
-- the SDK should begin registering the Spool device automatically without
+- the SDK should begin registering the Spoot device automatically without
   transferring playback away from another device;
 - no access or refresh token should be printed in the console or URL.
 
-If you deny access, Spool should show a readable denial and allow a fresh login.
+If you deny access, Spoot should show a readable denial and allow a fresh login.
 
 ### 7. Verify automatic Web Playback SDK registration
 
-Wait for Spool to report a ready player/device; no separate Connect Player click
+Wait for Spoot to report a ready player/device; no separate Connect Player click
 is required. In another Spotify client, open the device picker and confirm that
-**Spool** appears. Registration must not steal playback from the current device.
+**Spoot** appears. Registration must not steal playback from the current device.
 Initialization, account, authentication, and playback failures should be shown
 as actionable errors rather than leaving the page blank.
 
-### 8. Transfer playback into Spool
+### 8. Transfer playback into Spoot
 
 If another client is active, confirm the banner says **Listening on _device_**
 (or the neutral fallback) and choose **Listen here**. The status should move
-through transfer and then disappear while Spool is active, without repeatedly
+through transfer and then disappear while Spoot is active, without repeatedly
 transferring in a loop. If playback arrives paused or
-the browser reports an autoplay failure, click or press play once in Spool; that
+the browser reports an autoplay failure, click or press play once in Spoot; that
 user gesture unlocks protected browser audio. Spotify explicitly recommends
 activating the SDK element from a user interaction in its
 [SDK player reference](https://developer.spotify.com/documentation/web-playback-sdk/reference#api-spotify-player-activateelement).
@@ -141,7 +141,7 @@ activating the SDK element from a user interaction in its
 ### 9. Start a track elsewhere if needed
 
 If Spotify reports no current player state, start an ordinary track in the
-Spotify desktop, mobile, or web app, then select **Spool** again. Confirm the
+Spotify desktop, mobile, or web app, then select **Spoot** again. Confirm the
 main artwork, title, artists, duration, ambient background, and document title
 reconcile to that track. A temporary null state should show an empty/recoverable
 state, not crash the UI.
@@ -184,13 +184,13 @@ Press repeat three times and verify the order `off` -> `context` -> `track` ->
 Open **Up Next** (or press Q). Confirm it renders a **Now Playing** row and the
 upcoming Spotify items with artwork, title, artist/show names, and sensible
 track/episode handling. Click the first and then a later ordinary upcoming song.
-When the current source is an album or playlist, Spool should issue one Start
+When the current source is an album or playlist, Spoot should issue one Start
 Playback request with that context and the selected track offset; Spotify should
 rebuild the remaining queue. It must not send a burst of Skip Next commands to
 walk down the list. A source without an addressable album/playlist context may
 start the selected track directly because Spotify exposes no jump-to-queue-row
 endpoint. If Spotify has appended autoplay recommendations after an album,
-click one of those recommendation rows and confirm Spool starts from that
+click one of those recommendation rows and confirm Spoot starts from that
 visible recommendation tail instead of sending an invalid album offset.
 Episode, local, null, restricted, and unplayable rows must remain grey and
 inert. Skip a track and verify the queue refreshes. An empty Spotify queue
@@ -206,7 +206,7 @@ that playlist after the selected position instead of repeated copies of one
 song. A followed Spotify/editorial or generated playlist should remain visible
 but grey as **Metadata only**. A playlist-item `403` must downgrade to that state
 instead of looking empty. The Library note must explain that Spotify does not
-expose playlist folders or DJ; Spool must not invent either.
+expose playlist folders or DJ; Spoot must not invent either.
 
 Open **Search** from the dock or press `/`. Confirm the debounced results are
 grouped into Songs, Artists, Albums, and Playlists. Song results should start in
@@ -223,7 +223,7 @@ stay inert, and the external Spotify link must not accidentally trigger playback
 Open Settings and expand the custom Listening Device control. Confirm the
 active device is selected, unavailable/restricted devices cannot be chosen, and
 selecting another available device transfers playback there. After transfer,
-the top banner should offer **Listen here** again. Select Spool and confirm it
+the top banner should offer **Listen here** again. Select Spoot and confirm it
 hides.
 
 Press L to open the floating lyrics widget while a normal song is playing.
@@ -244,7 +244,7 @@ with Escape.
 
 Reload [http://127.0.0.1:5173/](http://127.0.0.1:5173/). The authenticated
 session should restore as **Spotify connected** without another authorization
-prompt while the stored grant remains valid. The SDK should recreate one Spool
+prompt while the stored grant remains valid. The SDK should recreate one Spoot
 device automatically and state/queue/device data should hydrate. Leaving
 the app open across an access-token expiry should refresh once rather than
 racing duplicate refreshes. Do not copy token values out of browser storage to
@@ -255,8 +255,8 @@ sign in again is expected behavior.
 
 Choose **Log out**. The SDK device should disconnect, playback data should clear,
 and login/setup should become visible. In browser developer tools, inspect
-storage by key name only and confirm `spool.auth.tokens` is absent; do not expose
-or paste any prior token value. Reload and verify Spool stays logged out.
+storage by key name only and confirm `spoot.auth.tokens` is absent; do not expose
+or paste any prior token value. Reload and verify Spoot stays logged out.
 
 ## Interpreting common failures
 
@@ -284,9 +284,9 @@ but never a Bearer token.
 
 ### Token request was blocked
 
-Spool first uses the browser Fetch API for Spotify's documented PKCE token
+Spoot first uses the browser Fetch API for Spotify's documented PKCE token
 request, then retries through `XMLHttpRequest` if Fetch was intercepted before
-an HTTP response arrived. If both browser transports fail, Spool retains the
+an HTTP response arrived. If both browser transports fail, Spoot retains the
 short-lived verifier so **Retry** can repeat the exchange after
 `accounts.spotify.com` is allowed in the browser, extension, VPN, or DNS
 filter. The safe console diagnostic reports transport names only; do not paste
@@ -297,7 +297,7 @@ the callback URL, authorization code, verifier, or token values.
 - Confirm the browser supports EME/protected content and that Spotify playback
   is allowed.
 - Allow autoplay after a direct user gesture; press play once after transfer.
-- If Spool is embedded cross-origin, the iframe must allow `encrypted-media`
+- If Spoot is embedded cross-origin, the iframe must allow `encrypted-media`
   and `autoplay`.
 - Temporarily disable privacy, anti-tracking, script-blocking, or third-party
   content extensions and retry in a clean browser profile.
@@ -306,17 +306,17 @@ the callback URL, authorization code, verifier, or token values.
 
 ### LRCLIB certificate or network error
 
-Spool calls `https://lrclib.net/api` directly with a plain GET, exactly as the
+Spoot calls `https://lrclib.net/api` directly with a plain GET, exactly as the
 preserved single-file player does. `ERR_CERT_COMMON_NAME_INVALID` means the
 browser reached a host whose certificate does not belong to `lrclib.net`; it is
-not a CORS response Spool can repair. Check whether a DNS filter, ISP security
+not a CORS response Spoot can repair. Check whether a DNS filter, ISP security
 feature, VPN, antivirus, or router has replaced the domain. Allow `lrclib.net`
 or use a trusted encrypted-DNS resolver, then reload. Do not disable certificate
-validation and do not add a local proxy to Spool.
+validation and do not add a local proxy to Spoot.
 
 ### Redirect or authorization loops
 
 Confirm the dashboard, `config.local.js`, address bar, and server all use exactly
-`http://127.0.0.1:5173/`. Clear Spool through its Log out action and begin again.
+`http://127.0.0.1:5173/`. Clear Spoot through its Log out action and begin again.
 Do not share screenshots or logs that contain OAuth callback codes, token
 values, or authorization parameters.

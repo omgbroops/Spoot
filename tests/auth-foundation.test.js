@@ -108,7 +108,7 @@ test("production Date clock preserves fresh OAuth transactions and token session
 
   const before = Date.now();
   const state = new URL(await auth.createAuthorizationUrl()).searchParams.get("state");
-  const saved = JSON.parse(transactionStorage.getItem("spool.auth.pkce"));
+  const saved = JSON.parse(transactionStorage.getItem("spoot.auth.pkce"));
   const createdAt = saved.transactions[0].createdAt;
   assert.equal(typeof createdAt, "number");
   assert.ok(createdAt >= before && createdAt <= Date.now());
@@ -123,7 +123,7 @@ test("production Date clock preserves fresh OAuth transactions and token session
   assert.equal(auth.hasSession(), true);
   assert.equal(auth.hasGrantedScopes(), true);
   assert.deepEqual(result.tokens.scopes, ["streaming", "user-read-email"]);
-  assert.equal(transactionStorage.getItem("spool.auth.pkce"), null);
+  assert.equal(transactionStorage.getItem("spoot.auth.pkce"), null);
 });
 
 test("SpotifyAuth falls back to XMLHttpRequest when browser fetch is intercepted", async () => {
@@ -279,7 +279,7 @@ test("SpotifyAuth validates callback state, exchanges tokens, and cleans OAuth p
   assert.equal(result.tokens.accessToken, "access-one");
   assert.equal(result.tokens.refreshToken, "refresh-one");
   assert.equal(result.tokens.expiresAt, now + 3_600_000);
-  assert.equal(session.getItem("spool.auth.pkce"), null);
+  assert.equal(session.getItem("spoot.auth.pkce"), null);
   assert.deepEqual(historyCalls, [
     [{ preserved: true }, "", "/?keep=1#player"],
   ]);
@@ -303,18 +303,18 @@ test("OAuth transaction storage mirrors the login attempt and survives a fresh t
     localStorage: local,
     sessionStorage: firstSession,
   });
-  firstTab.setItem("spool.auth.pkce", "pending-transaction");
+  firstTab.setItem("spoot.auth.pkce", "pending-transaction");
 
-  assert.equal(firstSession.getItem("spool.auth.pkce"), "pending-transaction");
-  assert.equal(local.getItem("spool.auth.pkce"), "pending-transaction");
+  assert.equal(firstSession.getItem("spoot.auth.pkce"), "pending-transaction");
+  assert.equal(local.getItem("spoot.auth.pkce"), "pending-transaction");
 
   const callbackTab = createOAuthTransactionStorage({
     localStorage: local,
     sessionStorage: new MemoryStorage(),
   });
-  assert.equal(callbackTab.getItem("spool.auth.pkce"), "pending-transaction");
-  callbackTab.removeItem("spool.auth.pkce");
-  assert.equal(local.getItem("spool.auth.pkce"), null);
+  assert.equal(callbackTab.getItem("spoot.auth.pkce"), "pending-transaction");
+  callbackTab.removeItem("spoot.auth.pkce");
+  assert.equal(local.getItem("spoot.auth.pkce"), null);
 });
 
 test("SpotifyAuth keeps overlapping PKCE attempts isolated by OAuth state", async () => {
@@ -352,7 +352,7 @@ test("SpotifyAuth keeps overlapping PKCE attempts isolated by OAuth state", asyn
     url: `http://127.0.0.1:5173/?code=second-code&state=${secondState}`,
   });
   assert.deepEqual(exchangedCodes, ["first-code", "second-code"]);
-  assert.equal(transactionStorage.getItem("spool.auth.pkce"), null);
+  assert.equal(transactionStorage.getItem("spoot.auth.pkce"), null);
 });
 
 test("OAuth callbacks restored from the back-forward cache trigger one real reload", () => {

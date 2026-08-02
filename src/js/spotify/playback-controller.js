@@ -95,7 +95,7 @@ export class PlaybackController extends Emitter {
 
   async transferHere() {
     if (!this.deviceId) {
-      throw new Error("Wait for the Spool playback device to become ready.");
+      throw new Error("Wait for the Spoot playback device to become ready.");
     }
 
     // Invoke immediately from the click handler before the first await so mobile
@@ -155,7 +155,7 @@ export class PlaybackController extends Emitter {
     } = {},
   ) {
     if (!this.deviceId) {
-      throw new Error("Wait for the Spool playback device to become ready.");
+      throw new Error("Wait for the Spoot playback device to become ready.");
     }
 
     // Begin audio activation inside the click call stack, then serialize direct
@@ -169,7 +169,7 @@ export class PlaybackController extends Emitter {
         await activation;
         if (commandGeneration !== this.#playCommandGeneration || this.#destroyed) return false;
 
-        // Start Playback can target Spool directly. Avoid a preceding Transfer
+        // Start Playback can target Spoot directly. Avoid a preceding Transfer
         // Playback command because Spotify does not guarantee Player command order.
         const contextOffset = Number.isInteger(contextPosition) && contextPosition >= 0
           ? { position: contextPosition }
@@ -224,7 +224,7 @@ export class PlaybackController extends Emitter {
 
   async playQueueItem({ uri, index = 0 } = {}) {
     if (!this.deviceId || !this.playbackState?.activeDevice) {
-      throw new Error("Use Spool as the active Spotify device first.");
+      throw new Error("Use Spoot as the active Spotify device first.");
     }
     const queueIndex = Number(index);
     if (!Number.isInteger(queueIndex) || queueIndex < 0) {
@@ -361,7 +361,7 @@ export class PlaybackController extends Emitter {
         receivedAt: this.#now(),
         sdkReady: this.#sdk.ready,
       });
-      const spoolIsActive = Boolean(
+      const spootIsActive = Boolean(
         this.deviceId &&
           normalized.device?.id === this.deviceId &&
           normalized.device?.isActive,
@@ -370,12 +370,12 @@ export class PlaybackController extends Emitter {
         ...normalized,
         sdkReady: this.#sdk.ready,
         deviceReady: this.#sdk.ready,
-        activeDevice: spoolIsActive,
-        spoolDeviceId: this.deviceId,
+        activeDevice: spootIsActive,
+        spootDeviceId: this.deviceId,
       };
       this.#applyPlaybackState(state);
       if (this.#sdk.ready) {
-        this.#setConnection(spoolIsActive ? "active" : "player-ready");
+        this.#setConnection(spootIsActive ? "active" : "player-ready");
       }
       return state;
     } catch (error) {
@@ -396,7 +396,7 @@ export class PlaybackController extends Emitter {
         : [];
       if (this.deviceId && !devices.some((device) => device.id === this.deviceId)) {
         devices.unshift(normalizeSpotifyDevice(
-          { id: this.deviceId, name: "Spool", type: "Computer" },
+          { id: this.deviceId, name: "Spoot", type: "Computer" },
           this.deviceId,
           Boolean(this.playbackState?.activeDevice),
         ));
@@ -424,7 +424,7 @@ export class PlaybackController extends Emitter {
 
   async setVolume(volume) {
     if (!this.#sdk.ready || typeof this.#sdk.setVolume !== "function") {
-      throw new Error("The Spool browser player is not ready for volume control.");
+      throw new Error("The Spoot browser player is not ready for volume control.");
     }
     const normalized = Number(volume);
     if (!Number.isFinite(normalized) || normalized < 0 || normalized > 1) {
@@ -550,7 +550,7 @@ export class PlaybackController extends Emitter {
           ...this.playbackState,
           sdkReady: true,
           deviceReady: true,
-          spoolDeviceId: deviceId,
+          spootDeviceId: deviceId,
         };
         this.emit("state", this.playbackState);
         this.emit("ready", { deviceId });
@@ -568,7 +568,7 @@ export class PlaybackController extends Emitter {
           sdkReady: false,
           deviceReady: false,
           activeDevice: false,
-          spoolDeviceId: null,
+          spootDeviceId: null,
         };
         this.emit("state", this.playbackState);
         this.refreshDevices().catch(() => {});
@@ -599,7 +599,7 @@ export class PlaybackController extends Emitter {
             ? sdkState.repeatMode
             : (this.playbackState?.repeatMode ?? sdkState.repeatMode),
           activeDevice: true,
-          spoolDeviceId: this.deviceId,
+          spootDeviceId: this.deviceId,
         };
         this.#applyPlaybackState(merged);
         this.#setConnection("active");
@@ -622,7 +622,7 @@ export class PlaybackController extends Emitter {
             sdkReady: false,
             deviceReady: false,
             activeDevice: false,
-            spoolDeviceId: null,
+            spootDeviceId: null,
           });
         }
         this.#setConnection(state, { message: event.message });

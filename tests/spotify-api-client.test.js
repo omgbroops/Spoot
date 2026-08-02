@@ -198,17 +198,17 @@ test("focused playback and queue methods use documented methods, bodies, and que
     },
   });
 
-  await client.transferPlayback("spool-device", { play: false });
-  await client.seek(1_234.6, { deviceId: "spool-device" });
-  await client.setShuffle(true, { deviceId: "spool-device" });
-  await client.setRepeat("track", { deviceId: "spool-device" });
+  await client.transferPlayback("spoot-device", { play: false });
+  await client.seek(1_234.6, { deviceId: "spoot-device" });
+  await client.setShuffle(true, { deviceId: "spoot-device" });
+  await client.setRepeat("track", { deviceId: "spoot-device" });
   await client.addToQueue("spotify:episode:episode-1", {
-    deviceId: "spool-device",
+    deviceId: "spoot-device",
   });
 
   assert.equal(requests[0].options.method, "PUT");
   assert.deepEqual(JSON.parse(requests[0].options.body), {
-    device_ids: ["spool-device"],
+    device_ids: ["spoot-device"],
     play: false,
   });
   assert.equal(requests[1].url.searchParams.get("position_ms"), "1235");
@@ -238,7 +238,7 @@ test("library, album, and device methods use current Spotify endpoints and pagin
   await client.getAlbum("Album123", { market: "US" });
   await client.getAlbumTracks("Album123", { limit: 25, offset: 50, market: "US" });
   await client.getAvailableDevices();
-  await client.setPlaybackVolume(34.6, { deviceId: "spool-device" });
+  await client.setPlaybackVolume(34.6, { deviceId: "spoot-device" });
 
   assert.equal(requests[0].url.pathname, "/v1/me");
   assert.equal(requests[1].url.pathname, "/v1/me/playlists");
@@ -279,7 +279,7 @@ test("search and contextual playback use Spotify's documented request shapes", a
     market: "US",
   });
   await client.startPlayback({
-    deviceId: "spool-device",
+    deviceId: "spoot-device",
     contextUri: "spotify:playlist:playlist-1",
     offset: { position: 4 },
     positionMs: 0,

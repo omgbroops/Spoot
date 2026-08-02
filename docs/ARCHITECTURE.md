@@ -1,6 +1,6 @@
-# Spool architecture
+# Spoot architecture
 
-Spool is a static browser application with one directional playback pipeline:
+Spoot is a static browser application with one directional playback pipeline:
 
 ```text
 PKCE auth -> token provider -> Spotify Web API + Web Playback SDK
@@ -92,7 +92,7 @@ repositions the context instead of replacing it with a one-song queue.
 `lyrics/lyrics-service.js` is a separate, read-only metadata boundary. It makes
 plain, header-free GET requests directly to LRCLIB, preferring synchronized
 lyrics and falling back to static lyrics. It receives no Spotify credential and
-keeps no negative cache after transient provider failures. Spool intentionally
+keeps no negative cache after transient provider failures. Spoot intentionally
 has no proxy, Spotify Desktop/Spicetify companion bridge, loopback lyrics
 service, or desktop credential extraction.
 
@@ -116,7 +116,7 @@ refreshVolume()       setVolume(0..1)
 ```
 
 The controller reconciles SDK `player_state_changed` events (the primary signal
-for playback in Spool) with Web API hydration and recovery. SDK and API payloads
+for playback in Spoot) with Web API hydration and recovery. SDK and API payloads
 are converted to one normalized model before reaching the UI. The model carries
 device readiness/activity, Spotify URI and ID, title, artist names, album,
 artwork, duration and position in milliseconds, paused/playing, shuffle, repeat,
@@ -127,7 +127,7 @@ and timestamp. It stops while paused, clamps to duration, and resynchronizes on
 every Spotify state event; animation never becomes a reason to poll Spotify.
 Queue payloads are separately normalized into current and upcoming items with
 track/episode-safe metadata. Spotify exposes neither queue-entry identifiers
-nor a jump-to-occurrence endpoint. Spool therefore reaches a clicked upcoming
+nor a jump-to-occurrence endpoint. Spoot therefore reaches a clicked upcoming
 entry with the documented Next operation, once per preceding occurrence, which
 preserves Spotify's queue and playback context. A final state refresh detects a
 queue that changed mid-command. Episodes, local files, and restricted rows
@@ -146,7 +146,7 @@ seeking, and pauses auto-follow after manual scrolling. Widget dragging handles
 pointer ownership, front ordering, screen-edge clamping, responsive defaults,
 and persisted positions.
 
-The top status is hidden while Spool is active. When another Spotify Connect
+The top status is hidden while Spoot is active. When another Spotify Connect
 device is active it displays the returned device name (or a neutral fallback)
 and offers **Listen here**. Settings renders the current device list as a custom
 glass listbox; restricted or identifier-less devices remain disabled.
@@ -158,21 +158,21 @@ and ambient audio reaction use a small Web Audio capture layer installed before
 the Spotify Web Playback SDK creates its media graph. If Spotify keeps playback
 inside a cross-origin frame that page JavaScript cannot reach, those controls
 stay disabled rather than pretending to affect an inaccessible stream. Crossfade
-and gapless remain isolated. Spool owns an optional Media
+and gapless remain isolated. Spoot owns an optional Media
 Session adapter so the existing system-media and headphone-skip settings can
 change without competing with the SDK's disabled built-in Media Session
 integration.
 
 ## Storage ownership
 
-Spool uses small, explicit browser-storage namespaces:
+Spoot uses small, explicit browser-storage namespaces:
 
 | Namespace/key | Storage | Owner | Data |
 | --- | --- | --- | --- |
-| `spool.auth.tokens` | `localStorage` | token store | access/refresh tokens, access and refresh expiry timestamps, authorization time, token type, granted scopes |
-| `spool.auth.pkce` | mirrored `sessionStorage` + `localStorage` | Spotify auth | capped, short-lived verifier/state transactions keyed by OAuth state; the opener-owned auth instance handles popup callbacks, the persistent copy supports direct/fresh-tab fallback, and the matching entry is consumed from both stores |
-| `spool.ui.widget-positions` | `localStorage` | `ui/widgets.js` | saved `{x, y}` positions for the Now Playing, queue, and lyrics widgets |
-| `spool.ui.preferences` | `localStorage` | `app.js` | queue, dock, lyrics-widget visibility, Media Session visibility, and media-key skip preference |
+| `spoot.auth.tokens` | `localStorage` | token store | access/refresh tokens, access and refresh expiry timestamps, authorization time, token type, granted scopes |
+| `spoot.auth.pkce` | mirrored `sessionStorage` + `localStorage` | Spotify auth | capped, short-lived verifier/state transactions keyed by OAuth state; the opener-owned auth instance handles popup callbacks, the persistent copy supports direct/fresh-tab fallback, and the matching entry is consumed from both stores |
+| `spoot.ui.widget-positions` | `localStorage` | `ui/widgets.js` | saved `{x, y}` positions for the Now Playing, queue, and lyrics widgets |
+| `spoot.ui.preferences` | `localStorage` | `app.js` | queue, dock, lyrics-widget visibility, Media Session visibility, and media-key skip preference |
 
 Spotify playback state, device lists, Library pages, search results, queue data,
 temporary lyrics/artwork caches, and audio are not persisted as a local media library. The
@@ -199,7 +199,7 @@ real-account restrictions.
 ## Legacy isolation
 
 `reference/original-local-player.html` is an immutable artifact, not a runtime
-module. Nothing imports, embeds, navigates to, or executes it from Spool's entry
+module. Nothing imports, embeds, navigates to, or executes it from Spoot's entry
 point. Runtime source contains no constructor path for the original
 `HTMLAudioElement` decks, Web Audio graph, local import pipeline, or
 `musicplayer` database. Static safety tests defend that boundary.

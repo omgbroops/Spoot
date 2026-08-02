@@ -2,7 +2,7 @@
 
 `original-local-player.html` is an exact copy of the source player at
 `C:\Users\Mohammed\Documents\MusicPlayer\player.html` when the Spotify-focused
-Spool conversion began on July 23, 2026.
+Spoot conversion began on July 23, 2026.
 
 The copy is intentionally immutable. Its SHA-256 digest is recorded beside it
 so later work can verify that the reference has not drifted.
@@ -24,7 +24,7 @@ liquid-glass interface and its local playback implementation:
 - keyboard shortcuts, hidden mode, command palette, lyric display, and lyric
   synchronization tooling.
 
-Spool's Spotify application may reuse the visual and interaction language, but
+Spoot's Spotify application may reuse the visual and interaction language, but
 must never execute this reference file or initialize its local audio engine.
 Legacy implementations remain here for future, separately scoped work.
 

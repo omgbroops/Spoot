@@ -87,7 +87,7 @@ export function setQueueVisible(visible) {
 }
 
 export function createQueueRow(item, options = {}) {
-  const local = Boolean(item?.isLocal || String(item?.uri || '').startsWith('spool:local:'));
+  const local = Boolean(item?.isLocal || String(item?.uri || '').startsWith('spoot:local:'));
   const unavailableReason = options.playing || local ? null : directPlaybackBlockReason(item);
   const row = document.createElement('div');
   const type = item.contentType || item.type || 'track';
@@ -115,7 +115,7 @@ export function createQueueRow(item, options = {}) {
   info.append(titleElement, subtitleElement);
   row.append(image, info);
 
-  if (/^(?:spotify:track|spool:local):/u.test(item.uri || '')) row.append(queueAddButton(item));
+  if (/^(?:spotify:track|spoot:local):/u.test(item.uri || '')) row.append(queueAddButton(item));
   if (!options.playing) row.append(playButton(item, options.queueIndex, unavailableReason));
   if (options.playing) row.append(equalizerBars());
   return row;

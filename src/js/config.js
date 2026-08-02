@@ -30,7 +30,7 @@ export async function loadConfig({ mock = isMockMode() } = {}) {
     return {
       clientId: "mock-client-id",
       redirectUri: deriveRedirectUri(),
-      deviceName: "Spool (Mock)",
+      deviceName: "Spoot (Mock)",
       scopes: REQUIRED_SPOTIFY_SCOPES,
       configured: true,
       mock: true,
@@ -52,7 +52,7 @@ export async function loadConfig({ mock = isMockMode() } = {}) {
   return {
     clientId,
     redirectUri,
-    deviceName: String(source.SPOTIFY_DEVICE_NAME || "Spool").trim(),
+    deviceName: String(source.SPOTIFY_DEVICE_NAME || "Spoot").trim(),
     scopes: REQUIRED_SPOTIFY_SCOPES,
     configured: !PLACEHOLDER_CLIENT_IDS.has(clientId),
     mock: false,

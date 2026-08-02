@@ -1,19 +1,19 @@
 import { getElements } from './elements.js';
 
 export const CONNECTION_COPY = Object.freeze({
-  'not-configured': { title: 'Connect Spotify', message: 'Add your Spotify Client ID to begin.', primary: 'Set up Spool' },
-  'logged-out': { title: 'Spotify is disconnected', message: 'Log in to create the Spool playback device.', primary: 'Log in' },
-  authorizing: { title: 'Authorizing Spotify', message: 'Finish signing in, then return to Spool.', primary: 'Authorizing…', disabled: true },
-  'logged-in': { title: 'Spotify connected', message: 'Preparing the Spool browser player.', primary: 'Connecting…', disabled: true },
+  'not-configured': { title: 'Connect Spotify', message: 'Add your Spotify Client ID to begin.', primary: 'Set up Spoot' },
+  'logged-out': { title: 'Spotify is disconnected', message: 'Log in to create the Spoot playback device.', primary: 'Log in' },
+  authorizing: { title: 'Authorizing Spotify', message: 'Finish signing in, then return to Spoot.', primary: 'Authorizing…', disabled: true },
+  'logged-in': { title: 'Spotify connected', message: 'Preparing the Spoot browser player.', primary: 'Connecting…', disabled: true },
   'loading-sdk': { title: 'Loading Spotify player', message: 'Preparing the Web Playback SDK.', primary: 'Loading…', disabled: true },
-  'connecting-player': { title: 'Connecting Spool', message: 'Creating your Spotify Connect device.', primary: 'Connecting…', disabled: true },
-  'player-ready': { title: 'Spool is ready', message: 'Move Spotify playback to this browser.', primary: 'Listen here' },
+  'connecting-player': { title: 'Connecting Spoot', message: 'Creating your Spotify Connect device.', primary: 'Connecting…', disabled: true },
+  'player-ready': { title: 'Spoot is ready', message: 'Move Spotify playback to this browser.', primary: 'Listen here' },
   'external-device': { title: 'Listening on another device', message: 'Move Spotify playback to this browser.', primary: 'Listen here' },
-  'transferring-playback': { title: 'Moving playback to Spool', message: 'Spotify is activating this device.', primary: 'Transferring…', disabled: true },
-  active: { title: 'Playing through Spool', message: 'This browser is the active Spotify device.' },
+  'transferring-playback': { title: 'Moving playback to Spoot', message: 'Spotify is activating this device.', primary: 'Transferring…', disabled: true },
+  active: { title: 'Playing through Spoot', message: 'This browser is the active Spotify device.' },
   'temporarily-unavailable': { title: 'Spotify is temporarily unavailable', message: 'Check your connection and try again.', primary: 'Retry' },
-  'authorization-expired': { title: 'Spotify authorization expired', message: 'Log in again to reconnect Spool.', primary: 'Log in again' },
-  error: { title: 'Spool could not connect', message: 'Open Settings for details or try again.', primary: 'Retry' },
+  'authorization-expired': { title: 'Spotify authorization expired', message: 'Log in again to reconnect Spoot.', primary: 'Log in again' },
+  error: { title: 'Spoot could not connect', message: 'Open Settings for details or try again.', primary: 'Retry' },
 });
 
 let handlers = {};
@@ -52,7 +52,7 @@ export function renderSpotifySettings(settings = {}) {
     elements.settingsAccountStatus.textContent = settings.accountText || (settings.loggedIn ? 'Spotify connected' : 'Not connected');
   }
   if (elements.settingsDeviceStatus) {
-    elements.settingsDeviceStatus.textContent = settings.deviceText || (settings.deviceReady ? 'Spool device ready' : 'Spool device unavailable');
+    elements.settingsDeviceStatus.textContent = settings.deviceText || (settings.deviceReady ? 'Spoot device ready' : 'Spoot device unavailable');
   }
 
   configureAction(elements.settingsConnect, settings.connect, {
@@ -61,7 +61,7 @@ export function renderSpotifySettings(settings = {}) {
     hidden: settings.loggedIn,
   });
   configureAction(elements.settingsTransfer, settings.transfer, {
-    label: settings.transferLabel || 'Use Spool',
+    label: settings.transferLabel || 'Use Spoot',
     onClick: settings.onTransfer || handlers.onTransfer,
     hidden: !settings.loggedIn || !settings.deviceReady,
     disabled: settings.transferring,

@@ -427,7 +427,7 @@ export class SpotifyApiClient {
     });
   }
 
-  // Compatibility wrappers keep the rest of Spool track-oriented while using
+  // Compatibility wrappers keep the rest of Spoot track-oriented while using
   // Spotify's current generic library endpoints under the hood.
   saveTracks(trackIds, { signal } = {}) {
     const ids = assertSpotifyIds(trackIds, "Track", 40);

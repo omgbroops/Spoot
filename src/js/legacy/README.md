@@ -2,13 +2,13 @@
 
 The original local-files player is preserved at
 `reference/original-local-player.html` with a recorded SHA-256 digest. It is a
-reference artifact for design and future feature work, not part of Spool's
+reference artifact for design and future feature work, not part of Spoot's
 runtime module graph.
 
 ## What the reference preserves
 
 The original single-file application contains substantially more than the
-Spotify-focused Spool pass:
+Spotify-focused Spoot pass:
 
 - two local `HTMLAudioElement` decks and a Web Audio graph;
 - local-file and Dropbox import, metadata/artwork parsing, and IndexedDB media
@@ -21,15 +21,15 @@ Spotify-focused Spool pass:
 - sleep timer, listening statistics, Media Session integration, hidden mode,
   keyboard controls, and playback restoration;
 - the draggable glass widgets, bottom dock, modals, ambient artwork, and
-  responsive immersive layout inherited by Spool.
+  responsive immersive layout inherited by Spoot.
 
 The preserved file should not be modified to make Spotify work. Changes belong
-in modular Spool source; the reference hash exists so accidental drift is
+in modular Spoot source; the reference hash exists so accidental drift is
 detectable.
 
 ## What is active now
 
-Spool carries forward the visual shell and the interactions that have a clear
+Spoot carries forward the visual shell and the interactions that have a clear
 Spotify-safe mapping: Now Playing, the Spotify queue renderer, draggable widget
 placement, main and immersive transport controls, responsive immersive mode,
 keyboard shortcuts, modal treatment, connection/status surfaces, Spotify
@@ -53,7 +53,7 @@ seek through the selected Spotify controller.
 ## Why the local engine never executes
 
 The reference is outside the `src/js` module tree and `index.html` imports only
-Spool's modular `app.js`. No runtime module imports or embeds the reference.
+Spoot's modular `app.js`. No runtime module imports or embeds the reference.
 Consequently its script blocks, audio decks, Web Audio nodes, timers, event
 handlers, and `musicplayer` IndexedDB calls are never evaluated.
 
@@ -61,7 +61,7 @@ This is a functional boundary, not merely a CSS-disabled state. Starting the
 old engine in the background would create competing playback, double-handle
 transport gestures, expose sound controls that cannot validly process Spotify's
 protected stream, and mix local library persistence with OAuth credentials.
-Spool's static-safety tests check runtime source for accidental local audio/Web
+Spoot's static-safety tests check runtime source for accidental local audio/Web
 Audio initialization and reuse of the legacy database name.
 
 ## Rules for a future local-player pass
@@ -73,7 +73,7 @@ Local playback can return only as separately scoped work with these boundaries:
 - require an explicit user choice of playback engine before initializing it;
 - guarantee that Spotify and local audio lifecycles are mutually exclusive;
 - route transport/UI gestures to one selected controller only;
-- use a new `spool.local.*` storage namespace rather than reopening or silently
+- use a new `spoot.local.*` storage namespace rather than reopening or silently
   migrating `musicplayer`;
 - keep OAuth/token storage isolated from local media and preferences;
 - design queue semantics honestly for each engine instead of pretending

@@ -1,6 +1,6 @@
 import { parseId3 } from "./id3.js";
 
-const DB_NAME = "spool-local-media";
+const DB_NAME = "spoot-local-media";
 const DB_VERSION = 1;
 const TRACKS = "tracks";
 const AUDIO = "audio";
@@ -65,7 +65,7 @@ export class LocalLibraryService {
     const hasCover = Boolean(tags.picture?.bytes?.length > 100);
     const record = {
       id,
-      uri: `spool:local:${id}`,
+      uri: `spoot:local:${id}`,
       type: "track",
       title: tags.title || baseName,
       artist: tags.artist || "Unknown artist",
@@ -253,7 +253,7 @@ export function localSource(tracks = []) {
     kind: "local",
     name: "Local Files",
     description: "Music stored in this browser",
-    ownerName: "Spool",
+    ownerName: "Spoot",
     artworkUrl: tracks.find((track) => track.artworkUrl)?.artworkUrl || null,
     externalUrl: null,
     uri: null,

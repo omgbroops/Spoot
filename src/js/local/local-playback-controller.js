@@ -22,7 +22,7 @@ export class LocalPlaybackController extends Emitter {
     this.#audio = audioFactory();
     this.#onBeforePlay = onBeforePlay;
     this.connectionState = "local-ready";
-    this.deviceId = "spool-local-player";
+    this.deviceId = "spoot-local-player";
     this.volume = 1;
     this.playbackState = emptyLocalState();
     this.queue = emptyLocalQueue();
@@ -40,7 +40,7 @@ export class LocalPlaybackController extends Emitter {
   async playTrack(id, { contextIds, autoAdvance = true } = {}) {
     if (this.#destroyed) throw new Error("The local player has been closed.");
     const track = await this.#library.getTrack(id);
-    if (!track) throw new Error("That local song is no longer stored in Spool.");
+    if (!track) throw new Error("That local song is no longer stored in Spoot.");
     const ids = Array.isArray(contextIds) && contextIds.length ? contextIds : [id];
     this.#contextIds = ids.filter((value, index, all) => typeof value === "string" && all.indexOf(value) === index);
     if (!this.#contextIds.includes(id)) this.#contextIds.unshift(id);
@@ -52,7 +52,7 @@ export class LocalPlaybackController extends Emitter {
 
   async playNow(uri, { contextIds } = {}) {
     const id = localIdFromUri(uri);
-    if (!id) throw new Error("That is not a Spool local-file URI.");
+    if (!id) throw new Error("That is not a Spoot local-file URI.");
     return this.playTrack(id, { contextIds });
   }
 
@@ -292,7 +292,7 @@ export class LocalPlaybackController extends Emitter {
       sdkReady: false,
       deviceReady: true,
       activeDevice: true,
-      device: { id: this.deviceId, name: "Spool Local Files", type: "Computer", isActive: true, isRestricted: false, supportsVolume: true, volumePercent: Math.round(this.volume * 100) },
+      device: { id: this.deviceId, name: "Spoot Local Files", type: "Computer", isActive: true, isRestricted: false, supportsVolume: true, volumePercent: Math.round(this.volume * 100) },
       item,
       currentItem: item,
       itemUri: item?.uri || null,
@@ -311,7 +311,7 @@ export class LocalPlaybackController extends Emitter {
       repeatMode: this.playbackState?.repeatMode || "off",
       contentType: "track",
       restrictions: { content: null, deviceRestricted: false, disallowedActions: [] },
-      context: { type: "local", uri: "spool:local-files", href: null },
+      context: { type: "local", uri: "spoot:local-files", href: null },
       authoritativeAt: now,
       playbackChangedAt: now,
     };
@@ -335,7 +335,7 @@ export class LocalPlaybackController extends Emitter {
 }
 
 export function localIdFromUri(uri) {
-  const match = /^spool:local:(.+)$/u.exec(String(uri || ""));
+  const match = /^spoot:local:(.+)$/u.exec(String(uri || ""));
   return match?.[1] || null;
 }
 
@@ -345,7 +345,7 @@ function emptyLocalState() {
     sdkReady: false,
     deviceReady: true,
     activeDevice: true,
-    device: { id: "spool-local-player", name: "Spool Local Files", type: "Computer", isActive: true, isRestricted: false, supportsVolume: true, volumePercent: 100 },
+    device: { id: "spoot-local-player", name: "Spoot Local Files", type: "Computer", isActive: true, isRestricted: false, supportsVolume: true, volumePercent: 100 },
     item: null,
     currentItem: null,
     itemUri: null,
@@ -364,7 +364,7 @@ function emptyLocalState() {
     repeatMode: "off",
     contentType: null,
     restrictions: { content: null, deviceRestricted: false, disallowedActions: [] },
-    context: { type: "local", uri: "spool:local-files", href: null },
+    context: { type: "local", uri: "spoot:local-files", href: null },
     authoritativeAt: Date.now(),
     playbackChangedAt: null,
   };

@@ -96,9 +96,9 @@ test("manual lyrics persistently outrank embedded and automatic LRCLIB lyrics", 
   };
   const track = {
     id: "local-priority",
-    uri: "spool:local:local-priority",
+    uri: "spoot:local:local-priority",
     title: "Priority",
-    artist: "Spool",
+    artist: "Spoot",
     isLocal: true,
     lyrics: "[00:00.50]Embedded line",
   };
@@ -118,7 +118,7 @@ test("manual lyrics persistently outrank embedded and automatic LRCLIB lyrics", 
 test("embedded local lyrics replace an automatic LRCLIB cache but never a manual edit", async () => {
   const { LyricsStore } = await import("../src/js/lyrics/lyrics-store.js");
   const store = new LyricsStore({ indexedDBImpl: null });
-  const track = { id: "local-late-embed", uri: "spool:local:local-late-embed", title: "Late embed", artist: "Spool", isLocal: true };
+  const track = { id: "local-late-embed", uri: "spoot:local:local-late-embed", title: "Late embed", artist: "Spoot", isLocal: true };
   await store.put({
     key: "local:local-late-embed",
     text: "[00:01.00]Cached provider",

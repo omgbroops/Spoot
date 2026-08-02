@@ -21,7 +21,7 @@ test("hybrid playlists distinguish duplicate Spotify occurrences and anchor loca
   assert.notEqual(spotify[0].hybridKey, spotify[1].hybridKey);
   assert.deepEqual(spotify.map((item) => item.spotifyPosition), [0, 1, 2]);
 
-  const local = localEntry({ id: "local-one", uri: "spool:local:local-one", title: "Local one" });
+  const local = localEntry({ id: "local-one", uri: "spoot:local:local-one", title: "Local one" });
   const placements = placementsFromMerged([spotify[0], spotify[1], local, spotify[2]]);
   assert.deepEqual(placements, [{
     localId: "local-one",
@@ -38,8 +38,8 @@ test("multiple local songs keep a stable rank inside the same Spotify gap", () =
     { uri: "spotify:track:a", position: 0 },
     { uri: "spotify:track:b", position: 1 },
   ]);
-  const first = localEntry({ id: "one", uri: "spool:local:one", title: "One" });
-  const second = localEntry({ id: "two", uri: "spool:local:two", title: "Two" });
+  const first = localEntry({ id: "one", uri: "spoot:local:one", title: "One" });
+  const second = localEntry({ id: "two", uri: "spoot:local:two", title: "Two" });
   assert.deepEqual(
     placementsFromMerged([spotify[0], first, second, spotify[1]]).map((item) => item.rank),
     [0, 1],
@@ -62,8 +62,8 @@ test("hybrid transport preserves merged order across previous, natural endings, 
 
 test("a newly liked local song is representable before every existing row", () => {
   const spotify = annotateSpotifyOccurrences([{ uri: "spotify:track:kitten", position: 0 }]);
-  const older = localEntry({ id: "older", uri: "spool:local:older" });
-  const newest = localEntry({ id: "newest", uri: "spool:local:newest" });
+  const older = localEntry({ id: "older", uri: "spoot:local:older" });
+  const newest = localEntry({ id: "newest", uri: "spoot:local:newest" });
   const placements = placementsFromMerged([newest, older, spotify[0]]);
   assert.deepEqual(placements.map((item) => item.localId), ["newest", "older"]);
   assert.equal(placements[0].beforeKey, spotify[0].hybridKey);

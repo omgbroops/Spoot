@@ -21,7 +21,7 @@ export class SpotifyPlaybackSdk extends Emitter {
 
   constructor({
     tokenProvider,
-    name = "Spool",
+    name = "Spoot",
     windowRef = globalThis.window,
     documentRef = globalThis.document,
     loadTimeoutMs = 15_000,
@@ -86,7 +86,7 @@ export class SpotifyPlaybackSdk extends Emitter {
     this.#lastSdkToken = null;
     const player = new Spotify.Player({
       name: this.#name,
-      // Spool owns the optional, user-toggleable Media Session integration.
+      // Spoot owns the optional, user-toggleable Media Session integration.
       enableMediaSession: false,
       getOAuthToken: (callback) => {
         this.#provideSdkToken(callback, generation);
@@ -168,7 +168,7 @@ export class SpotifyPlaybackSdk extends Emitter {
 
   #assertReady() {
     if (!this.ready || !this.#player) {
-      throw new Error("The Spool playback device is not ready yet.");
+      throw new Error("The Spoot playback device is not ready yet.");
     }
   }
 
@@ -214,7 +214,7 @@ export class SpotifyPlaybackSdk extends Emitter {
     player.addListener("autoplay_failed", () => {
       if (!isCurrent()) return;
       this.emit("autoplay-failed", {
-        message: "Press play once to allow browser audio for Spool.",
+        message: "Press play once to allow browser audio for Spoot.",
       });
     });
   }
@@ -240,7 +240,7 @@ export class SpotifyPlaybackSdk extends Emitter {
       if (generation !== this.#connectionGeneration) return;
       this.emit("error", {
         type: "authentication_error",
-        message: "Spotify authorization expired. Reconnect Spool to continue playing.",
+        message: "Spotify authorization expired. Reconnect Spoot to continue playing.",
         error,
       });
     });

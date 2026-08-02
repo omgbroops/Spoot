@@ -28,9 +28,9 @@ export class MockPlaybackController extends Emitter {
     this.#throwScenario("sdk-error", "Mock Spotify SDK failed to load.");
     this.#setConnection("connecting-player");
     await Promise.resolve();
-    this.deviceId = "spool-mock-device";
+    this.deviceId = "spoot-mock-device";
     this.devices = [
-      { id: this.deviceId, name: "Spool (Mock)", type: "Computer", isActive: false, isRestricted: false, supportsVolume: true, volumePercent: 82 },
+      { id: this.deviceId, name: "Spoot (Mock)", type: "Computer", isActive: false, isRestricted: false, supportsVolume: true, volumePercent: 82 },
       { id: "mock-living-room", name: "Living room", type: "Speaker", isActive: false, isRestricted: false, supportsVolume: true, volumePercent: 56 },
     ];
     this.#setConnection("player-ready");
@@ -61,7 +61,7 @@ export class MockPlaybackController extends Emitter {
     this.playbackState = {
       ...(this.playbackState ?? createMockPlaybackState()),
       activeDevice: true,
-      device: { ...(this.playbackState?.device ?? {}), id: this.deviceId, name: "Spool (Mock)", isActive: true },
+      device: { ...(this.playbackState?.device ?? {}), id: this.deviceId, name: "Spoot (Mock)", isActive: true },
       authoritativeAt: Date.now(),
     };
     this.devices = this.devices.map((device) => ({ ...device, isActive: device.id === this.deviceId }));
@@ -98,7 +98,7 @@ export class MockPlaybackController extends Emitter {
 
   async playQueueItem({ index = 0 } = {}) {
     if (!this.playbackState?.activeDevice) {
-      throw new Error("Use Spool as the active Spotify device first.");
+      throw new Error("Use Spoot as the active Spotify device first.");
     }
     const queueIndex = Number(index);
     if (!Number.isInteger(queueIndex) || queueIndex < 0) {
