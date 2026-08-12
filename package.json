@@ -5,8 +5,12 @@
   "type": "module",
   "description": "A personal static Spotify player with a focused liquid-glass interface.",
   "scripts": {
+    "build:single": "node scripts/build-single.mjs",
     "test": "node --test tests/*.test.js",
     "check": "node --check src/js/app.js && node --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.8"
   },
   "engines": {
     "node": ">=20"

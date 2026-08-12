@@ -81,6 +81,22 @@ test("the browser entrypoint refreshes port configuration and displays the confi
   assert.match(app, /deviceText: `Register \$\{config\.redirectUri\} as the redirect URI`/u);
 });
 
+test("the generated single-file player embeds its font and sandbox OAuth recovery", () => {
+  const html = readFileSync(join(root, "single.html"), "utf8");
+  const index = readFileSync(join(root, "index.html"), "utf8");
+  const tokens = readFileSync(join(root, "src/styles/tokens.css"), "utf8");
+  const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+
+  assert.equal(manifest.scripts?.["build:single"], "node scripts/build-single.mjs");
+  assert.doesNotMatch(index, /fonts\.(?:googleapis|gstatic)\.com/u);
+  assert.match(tokens, /inter-latin\.woff2/u);
+  assert.match(html, /data:font\/woff2;base64,/u);
+  assert.match(html, /function watchOAuthPopup/u);
+  assert.match(html, /https:\/\/www\.kasandbox\.org\//u);
+  assert.doesNotMatch(html, /fonts\.(?:googleapis|gstatic)\.com/u);
+  assert.doesNotMatch(html, /\.\/src\/(?:js|styles|assets)\//u);
+});
+
 test("all static relative JavaScript imports resolve", () => {
   const jsFiles = walk(join(root, "src/js")).filter((path) => extname(path) === ".js");
   const importPattern = /(?:import\s+(?:[^"']+?\s+from\s+)?|export\s+[^"']+?\s+from\s+)["'](\.[^"']+)["']/g;
