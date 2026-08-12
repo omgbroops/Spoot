@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Portable one-file Spoot build. Replace YOUR_SPOTIFY_CLIENT_ID before live use, serve over HTTP, and register this exact page URL as Spotify's redirect URI. -->
+<!-- Portable one-file Spoot build. Serve over HTTP and register this exact page URL as Spotify's redirect URI. -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -3986,7 +3986,7 @@ __export(config_local_exports, {
 var SPOTIFY_CLIENT_ID, SPOTIFY_REDIRECT_URI, SPOTIFY_DEVICE_NAME;
 var init_config_local = __esm({
   "src/js/config.local.js"() {
-    SPOTIFY_CLIENT_ID = "YOUR_SPOTIFY_CLIENT_ID";
+    SPOTIFY_CLIENT_ID = "3bce8856f88743c08e3e0bddcefd53eb";
     SPOTIFY_REDIRECT_URI = globalThis.location && globalThis.location.protocol !== "file:" ? `${globalThis.location.origin}${globalThis.location.pathname}` : "http://127.0.0.1:5174/single.html";
     SPOTIFY_DEVICE_NAME = "Spoot";
   }
