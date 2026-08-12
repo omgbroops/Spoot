@@ -86,6 +86,7 @@ test("the generated single-file player embeds its font and sandbox OAuth recover
   const index = readFileSync(join(root, "index.html"), "utf8");
   const tokens = readFileSync(join(root, "src/styles/tokens.css"), "utf8");
   const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const loader = readFileSync(join(root, "load.js"), "utf8");
 
   assert.equal(manifest.scripts?.["build:single"], "node scripts/build-single.mjs");
   assert.doesNotMatch(index, /fonts\.(?:googleapis|gstatic)\.com/u);
@@ -95,6 +96,9 @@ test("the generated single-file player embeds its font and sandbox OAuth recover
   assert.match(html, /https:\/\/www\.kasandbox\.org\//u);
   assert.doesNotMatch(html, /fonts\.(?:googleapis|gstatic)\.com/u);
   assert.doesNotMatch(html, /\.\/src\/(?:js|styles|assets)\//u);
+  assert.match(loader, /raw\.githubusercontent\.com\/omgbroops\/Spoot\/single-file\/single\.html/u);
+  assert.match(loader, /cache:\s*'no-store'/u);
+  assert.doesNotMatch(loader, /cdn\.jsdelivr\.net.+single\.html/u);
 });
 
 test("all static relative JavaScript imports resolve", () => {

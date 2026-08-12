@@ -1,6 +1,11 @@
 (function () {
-  fetch('https://cdn.jsdelivr.net/gh/omgbroops/Spoot@single-file/single.html?t=' + Date.now())
-    .then(function (r) { return r.text(); })
+  fetch('https://raw.githubusercontent.com/omgbroops/Spoot/single-file/single.html?t=' + Date.now(), {
+    cache: 'no-store'
+  })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    })
     .then(function (html) {
       document.open();
       document.write(html); 
