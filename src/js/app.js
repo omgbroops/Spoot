@@ -10,6 +10,7 @@ import {
 } from "./auth/spotify-auth.js?v=20260723-library1";
 import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-library1";
 import { DEFAULT_TOKEN_STORAGE_KEY } from "./auth/token-store.js";
+import { watchOAuthPopup } from "./auth/oauth-popup.js?v=20260812-sandbox-auth";
 import {
   AUDIO_EQ_BANDS,
   AUDIO_EQ_PRESETS,
@@ -202,6 +203,7 @@ let soundSettings = {
   eqPreset: "Flat",
 };
 let oauthPopup;
+let stopOAuthPopupWatch;
 let oauthCallbackInFlightState;
 let pendingOAuthCallback;
 let searchAbortController;
@@ -947,6 +949,8 @@ async function login() {
     return;
   }
   pendingOAuthCallback = undefined;
+  stopOAuthPopupWatch?.();
+  stopOAuthPopupWatch = undefined;
   oauthPopup = window.open(
     "about:blank",
     OAUTH_POPUP_NAME,
@@ -954,7 +958,7 @@ async function login() {
   );
   if (!oauthPopup) {
     renderConnection("error", {
-      message: "Allow popups for 127.0.0.1, then try logging in again.",
+      message: `Allow popups for ${location.hostname || "this site"}, then try logging in again.`,
     });
     return;
   }
@@ -967,8 +971,26 @@ async function login() {
       // Keep the auth instance that created the verifier alive in this tab.
       navigate: (url) => oauthPopup.location.replace(url),
     });
+    const watchedPopup = oauthPopup;
+    stopOAuthPopupWatch = watchOAuthPopup({
+      popup: watchedPopup,
+      expectedOrigin: new URL(config.redirectUri).origin,
+      onCallback: (url, source) => {
+        // The redirect response itself may be a host-level 403. Once its URL
+        // is same-origin, the code and state are enough to finish PKCE here.
+        try { source.close(); } catch {}
+        return handleOAuthCallbackMessage({ url }, source);
+      },
+      onClosed: () => handleOAuthPopupClosed(watchedPopup),
+      onTimeout: () => handleOAuthPopupTimeout(watchedPopup),
+      onError: (error) => {
+        console.warn("Spotify popup inspection failed.", safeDiagnostic(error, "oauth-popup"));
+      },
+    });
     oauthPopup.focus();
   } catch (error) {
+    stopOAuthPopupWatch?.();
+    stopOAuthPopupWatch = undefined;
     oauthPopup.close();
     oauthPopup = undefined;
     renderConnection("error", { message: humanizeError(error) });
@@ -998,6 +1020,7 @@ async function handleOAuthCallbackMessage(data, source = null) {
   const inFlightKey = callbackState || "missing-callback-state";
   if (oauthCallbackInFlightState === inFlightKey) return;
   oauthCallbackInFlightState = inFlightKey;
+  const callbackPopup = source || oauthPopup;
 
   renderConnection("authorizing", {
     message: "Finishing Spotify sign-in…",
@@ -1026,11 +1049,40 @@ async function handleOAuthCallbackMessage(data, source = null) {
       close: true,
     });
   } finally {
+    stopOAuthPopupWatch?.();
+    stopOAuthPopupWatch = undefined;
+    try {
+      if (callbackPopup && !callbackPopup.closed) callbackPopup.close();
+    } catch {}
     oauthPopup = undefined;
     if (oauthCallbackInFlightState === inFlightKey) {
       oauthCallbackInFlightState = undefined;
     }
   }
+}
+
+function handleOAuthPopupClosed(popup) {
+  if (oauthPopup !== popup || oauthCallbackInFlightState) return;
+  oauthPopup = undefined;
+  stopOAuthPopupWatch = undefined;
+  if (connectionState !== "authorizing") return;
+  renderLoggedOut();
+  renderConnection("logged-out", {
+    message: "Spotify sign-in was cancelled. Choose Log in to try again.",
+  });
+}
+
+function handleOAuthPopupTimeout(popup) {
+  if (oauthPopup !== popup || oauthCallbackInFlightState) return;
+  try {
+    if (!popup.closed) popup.close();
+  } catch {}
+  oauthPopup = undefined;
+  stopOAuthPopupWatch = undefined;
+  renderConnection("error", {
+    message: "Spotify sign-in timed out. Choose Log in to try again.",
+  });
+  renderSpotifySettings({ loggedIn: false, onConnect: login });
 }
 
 function retryPendingOAuthCallback() {
