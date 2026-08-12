@@ -46,10 +46,10 @@ backend, or Spotify Client Secret.
 From the repository root, start the static server on Windows:
 
 ```powershell
-python -m http.server 5173 --bind 127.0.0.1
+python -m http.server 5174 --bind 127.0.0.1
 ```
 
-Open [http://127.0.0.1:5173/?mock=1](http://127.0.0.1:5173/?mock=1).
+Open [http://127.0.0.1:5174/?mock=1](http://127.0.0.1:5174/?mock=1).
 Mock mode requires `mock=1`; it is never selected during an ordinary live
 startup.
 
@@ -81,7 +81,7 @@ Library access uses `user-library-read`, `playlist-read-private`, and
 out and authorize one more time after these scopes are added.
 
 1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
-2. Register this exact redirect URI: `http://127.0.0.1:5173/`
+2. Register this exact redirect URI: `http://127.0.0.1:5174/`
 3. Copy the example configuration:
 
    ```powershell
@@ -94,10 +94,10 @@ out and authorize one more time after these scopes are added.
 5. Start the server:
 
    ```powershell
-   python -m http.server 5173 --bind 127.0.0.1
+   python -m http.server 5174 --bind 127.0.0.1
    ```
 
-6. Open [http://127.0.0.1:5173/](http://127.0.0.1:5173/), choose **Log in**,
+6. Open [http://127.0.0.1:5174/](http://127.0.0.1:5174/), choose **Log in**,
    and allow the Spotify sign-in popup. Spoot keeps its original tab open so
    the same in-memory authorization instance that created the temporary PKCE
    verifier can validate Spotify's callback. The popup hands the callback to

@@ -10,12 +10,13 @@ import {
 
 test("configuration uses the exact loopback redirect and requested scopes", () => {
   const location = {
-    href: "http://127.0.0.1:5173/?mock=1",
-    origin: "http://127.0.0.1:5173",
+    href: "http://127.0.0.1:5174/?mock=1",
+    origin: "http://127.0.0.1:5174",
     pathname: "/",
   };
   assert.equal(isMockMode(location), true);
-  assert.equal(deriveRedirectUri(location), "http://127.0.0.1:5173/");
+  assert.equal(deriveRedirectUri(location), "http://127.0.0.1:5174/");
+  assert.equal(deriveRedirectUri(undefined), "http://127.0.0.1:5174/");
   assert.deepEqual(validateDevelopmentOrigin(deriveRedirectUri(location), location), []);
   assert.deepEqual(REQUIRED_SPOTIFY_SCOPES, [
     "streaming",
@@ -36,13 +37,13 @@ test("configuration uses the exact loopback redirect and requested scopes", () =
 
 test("configuration rejects localhost and mismatched HTTP origins", () => {
   const location = {
-    origin: "http://127.0.0.1:5173",
+    origin: "http://127.0.0.1:5174",
     pathname: "/",
   };
-  const localhost = validateDevelopmentOrigin("http://localhost:5173/", location);
+  const localhost = validateDevelopmentOrigin("http://localhost:5174/", location);
   assert.ok(localhost.some((message) => message.includes("localhost")));
   assert.ok(localhost.some((message) => message.includes("origin")));
 
-  const lan = validateDevelopmentOrigin("http://192.168.1.4:5173/", location);
+  const lan = validateDevelopmentOrigin("http://192.168.1.4:5174/", location);
   assert.ok(lan.some((message) => message.includes("127.0.0.1")));
 });

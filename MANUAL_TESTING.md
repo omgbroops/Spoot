@@ -64,7 +64,7 @@ account itself must also be Premium.
 In the app settings, add and save exactly:
 
 ```text
-http://127.0.0.1:5173/
+http://127.0.0.1:5174/
 ```
 
 The scheme, explicit IP, port, path, and trailing slash must match. Do not
@@ -80,7 +80,7 @@ Copy-Item .\src\js\config.example.js .\src\js\config.local.js
 
 Open `src/js/config.local.js` and replace only
 `YOUR_SPOTIFY_CLIENT_ID`. Leave the redirect URI as
-`http://127.0.0.1:5173/` and the device name as `Spoot` unless you intentionally
+`http://127.0.0.1:5174/` and the device name as `Spoot` unless you intentionally
 need a different display name. Never paste a Spotify Client Secret into this
 browser app. `config.local.js` is ignored by Git.
 
@@ -89,7 +89,7 @@ browser app. `config.local.js` is ignored by Git.
 Run the exact Windows command from the repository root:
 
 ```powershell
-python -m http.server 5173 --bind 127.0.0.1
+python -m http.server 5174 --bind 127.0.0.1
 ```
 
 Keep the terminal open for the rest of the test. A successful request should be
@@ -97,7 +97,7 @@ visible in its access log.
 
 ### 5. Open the correct loopback address
 
-Navigate directly to [http://127.0.0.1:5173/](http://127.0.0.1:5173/).
+Navigate directly to [http://127.0.0.1:5174/](http://127.0.0.1:5174/).
 Do not open `index.html` through `file://`, do not use `localhost`, and do not
 include `mock=1`. Confirm that setup/login remains visible rather than leaving
 you on a blank player.
@@ -242,7 +242,7 @@ with Escape.
 
 ### 17. Reload and verify restoration/refresh
 
-Reload [http://127.0.0.1:5173/](http://127.0.0.1:5173/). The authenticated
+Reload [http://127.0.0.1:5174/](http://127.0.0.1:5174/). The authenticated
 session should restore as **Spotify connected** without another authorization
 prompt while the stored grant remains valid. The SDK should recreate one Spoot
 device automatically and state/queue/device data should hydrate. Leaving
@@ -317,6 +317,6 @@ validation and do not add a local proxy to Spoot.
 ### Redirect or authorization loops
 
 Confirm the dashboard, `config.local.js`, address bar, and server all use exactly
-`http://127.0.0.1:5173/`. Clear Spoot through its Log out action and begin again.
+`http://127.0.0.1:5174/`. Clear Spoot through its Log out action and begin again.
 Do not share screenshots or logs that contain OAuth callback codes, token
 values, or authorization parameters.

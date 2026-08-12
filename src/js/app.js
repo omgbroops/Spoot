@@ -2,7 +2,7 @@ import {
   isMockMode,
   loadConfig,
   validateDevelopmentOrigin,
-} from "./config.js";
+} from "./config.js?v=20260808-port5174";
 import {
   SpotifyAuth,
   SpotifyAuthError,
@@ -282,7 +282,7 @@ async function initialize() {
     renderSpotifySettings({
       loggedIn: false,
       accountText: "Spotify Client ID missing",
-      deviceText: "Register http://127.0.0.1:5173/ as the redirect URI",
+      deviceText: `Register ${config.redirectUri} as the redirect URI`,
       onConnect: showSetupHelp,
       connectLabel: "Setup help",
     });

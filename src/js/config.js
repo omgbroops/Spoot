@@ -60,7 +60,7 @@ export async function loadConfig({ mock = isMockMode() } = {}) {
 }
 
 export function deriveRedirectUri(locationLike = globalThis.location) {
-  if (!locationLike) return "http://127.0.0.1:5173/";
+  if (!locationLike) return "http://127.0.0.1:5174/";
   return `${locationLike.origin}${locationLike.pathname}`;
 }
 

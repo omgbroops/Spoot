@@ -72,6 +72,15 @@ test("the static application has no React dependency or hidden first-run body", 
   assert.match(ignore, /^src\/js\/config\.local\.js$/m);
 });
 
+test("the browser entrypoint refreshes port configuration and displays the configured redirect", () => {
+  const html = readFileSync(join(root, "index.html"), "utf8");
+  const app = readFileSync(join(root, "src/js/app.js"), "utf8");
+
+  assert.match(html, /app\.js\?v=20260808-port5174/u);
+  assert.match(app, /from "\.\/config\.js\?v=20260808-port5174"/u);
+  assert.match(app, /deviceText: `Register \$\{config\.redirectUri\} as the redirect URI`/u);
+});
+
 test("all static relative JavaScript imports resolve", () => {
   const jsFiles = walk(join(root, "src/js")).filter((path) => extname(path) === ".js");
   const importPattern = /(?:import\s+(?:[^"']+?\s+from\s+)?|export\s+[^"']+?\s+from\s+)["'](\.[^"']+)["']/g;
