@@ -7,10 +7,13 @@ import {
   SpotifyAuth,
   SpotifyAuthError,
   shouldReloadOAuthPageAfterBfcacheRestore,
-} from "./auth/spotify-auth.js?v=20260723-library1";
+} from "./auth/spotify-auth.js?v=20260813-manual-auth";
 import { createOAuthTransactionStorage } from "./auth/transaction-storage.js?v=20260723-library1";
 import { DEFAULT_TOKEN_STORAGE_KEY } from "./auth/token-store.js";
-import { watchOAuthPopup } from "./auth/oauth-popup.js?v=20260812-sandbox-auth";
+import {
+  buildManualOAuthCallbackUrl,
+  watchOAuthPopup,
+} from "./auth/oauth-popup.js?v=20260813-manual-auth";
 import {
   AUDIO_EQ_BANDS,
   AUDIO_EQ_PRESETS,
@@ -354,6 +357,10 @@ function setupUi() {
     onTransfer: transferHere,
     onDisconnect: logout,
   });
+  getElements().oauthCodeForm?.addEventListener(
+    "submit",
+    submitManualOAuthCallback,
+  );
 
   const preferences = readUiPreferences();
   queueVisible = preferences.queueVisible !== false;
@@ -893,6 +900,7 @@ function renderSettings(status = {}) {
   const loggedIn = Boolean(config?.mock || auth?.hasSession());
   renderSpotifySettings({
     loggedIn,
+    manualOAuth: Boolean(auth && !config?.mock),
     deviceReady: Boolean(controller?.deviceId),
     transferring: connectionState === "transferring-playback",
     accountText: config?.mock ? "Mock session" : loggedIn ? "Spotify connected" : "Not connected",
@@ -971,6 +979,9 @@ async function login() {
       // Keep the auth instance that created the verifier alive in this tab.
       navigate: (url) => oauthPopup.location.replace(url),
     });
+    setManualOAuthStatus(
+      "If Spotify returns to an error page, paste its code or complete address here.",
+    );
     const watchedPopup = oauthPopup;
     stopOAuthPopupWatch = watchOAuthPopup({
       popup: watchedPopup,
@@ -997,6 +1008,48 @@ async function login() {
   }
 }
 
+async function submitManualOAuthCallback(event) {
+  event?.preventDefault();
+  const elements = getElements();
+  const value = elements.oauthCodeInput?.value;
+  if (!auth || !config?.redirectUri) {
+    setManualOAuthStatus("Spotify login is not configured.", { error: true });
+    return;
+  }
+
+  let callbackUrl;
+  try {
+    callbackUrl = buildManualOAuthCallbackUrl(value, {
+      redirectUri: config.redirectUri,
+      pendingStates: auth.pendingTransactionStates(),
+    });
+  } catch (error) {
+    const message = error?.message || "That Spotify code could not be used.";
+    setManualOAuthStatus(message, { error: true });
+    showToast(message);
+    return;
+  }
+
+  if (elements.oauthCodeSubmit) elements.oauthCodeSubmit.disabled = true;
+  setManualOAuthStatus("Finishing Spotify sign-in…");
+  try {
+    const completed = await handleOAuthCallbackMessage({ url: callbackUrl });
+    if (completed && elements.oauthCodeInput) {
+      elements.oauthCodeInput.value = "";
+      setManualOAuthStatus("Spotify connected.");
+    }
+  } finally {
+    if (elements.oauthCodeSubmit) elements.oauthCodeSubmit.disabled = false;
+  }
+}
+
+function setManualOAuthStatus(message, { error = false } = {}) {
+  const status = getElements().oauthCodeStatus;
+  if (!status) return;
+  status.textContent = message;
+  status.dataset.error = String(Boolean(error));
+}
+
 async function handleOAuthCallbackMessage(data, source = null) {
   if (!auth) return;
   if (source && oauthPopup && source !== oauthPopup) return;
@@ -1021,6 +1074,7 @@ async function handleOAuthCallbackMessage(data, source = null) {
   if (oauthCallbackInFlightState === inFlightKey) return;
   oauthCallbackInFlightState = inFlightKey;
   const callbackPopup = source || oauthPopup;
+  let completed = false;
 
   renderConnection("authorizing", {
     message: "Finishing Spotify sign-in…",
@@ -1037,10 +1091,12 @@ async function handleOAuthCallbackMessage(data, source = null) {
     pendingOAuthCallback = undefined;
     completeOAuthOnOriginalTab();
     postOAuthResult(source, { ok: true, state: callbackState });
+    completed = true;
   } catch (error) {
     pendingOAuthCallback = error?.code === "token_network_error"
       ? { url: callbackUrl.href, state: callbackState }
       : undefined;
+    setManualOAuthStatus(humanizeError(error), { error: true });
     renderOAuthCallbackFailure(error);
     postOAuthResult(source, {
       ok: false,
@@ -1059,6 +1115,7 @@ async function handleOAuthCallbackMessage(data, source = null) {
       oauthCallbackInFlightState = undefined;
     }
   }
+  return completed;
 }
 
 function handleOAuthPopupClosed(popup) {
@@ -1082,7 +1139,7 @@ function handleOAuthPopupTimeout(popup) {
   renderConnection("error", {
     message: "Spotify sign-in timed out. Choose Log in to try again.",
   });
-  renderSpotifySettings({ loggedIn: false, onConnect: login });
+  renderSpotifySettings({ loggedIn: false, manualOAuth: true, onConnect: login });
 }
 
 function retryPendingOAuthCallback() {
@@ -1159,7 +1216,7 @@ function renderOAuthCallbackFailure(error) {
   );
   const state = isAuthorizationExpired(error) ? "authorization-expired" : "error";
   renderConnection(state, { message: humanizeError(error) });
-  renderSpotifySettings({ loggedIn: false, onConnect: login });
+  renderSpotifySettings({ loggedIn: false, manualOAuth: true, onConnect: login });
 }
 
 function completeOAuthOnOriginalTab() {

@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { watchOAuthPopup } from "../src/js/auth/oauth-popup.js";
+import {
+  buildManualOAuthCallbackUrl,
+  watchOAuthPopup,
+} from "../src/js/auth/oauth-popup.js";
 
 function popupHarness(initialHref = "about:blank") {
   let href = initialHref;
@@ -109,4 +112,70 @@ test("OAuth popup polling reports a popup closed before callback", () => {
 
   assert.equal(closedCount, 1);
   assert.deepEqual(timers.cleared, [17]);
+});
+
+test("manual OAuth recovery adds the sole pending PKCE state to a bare code", () => {
+  const callback = new URL(buildManualOAuthCallbackUrl("spotify-code", {
+    redirectUri: "https://www.kasandbox.org/",
+    pendingStates: ["expected-state"],
+  }));
+
+  assert.equal(callback.origin, "https://www.kasandbox.org");
+  assert.equal(callback.searchParams.get("code"), "spotify-code");
+  assert.equal(callback.searchParams.get("state"), "expected-state");
+});
+
+test("manual OAuth recovery accepts a matching complete callback URL", () => {
+  const callback = buildManualOAuthCallbackUrl(
+    "https://www.kasandbox.org/?code=spotify-code&state=expected-state",
+    {
+      redirectUri: "https://www.kasandbox.org/",
+      pendingStates: ["expected-state", "newer-state"],
+    },
+  );
+
+  assert.equal(
+    callback,
+    "https://www.kasandbox.org/?code=spotify-code&state=expected-state",
+  );
+});
+
+test("manual OAuth recovery refuses a bare code without one pending transaction", () => {
+  assert.throws(
+    () => buildManualOAuthCallbackUrl("spotify-code", {
+      redirectUri: "https://www.kasandbox.org/",
+      pendingStates: [],
+    }),
+    /Log in first/u,
+  );
+  assert.throws(
+    () => buildManualOAuthCallbackUrl("spotify-code", {
+      redirectUri: "https://www.kasandbox.org/",
+      pendingStates: ["first", "second"],
+    }),
+    /complete callback URL/u,
+  );
+});
+
+test("manual OAuth recovery rejects foreign origins and unknown state", () => {
+  assert.throws(
+    () => buildManualOAuthCallbackUrl(
+      "https://example.com/?code=spotify-code&state=expected-state",
+      {
+        redirectUri: "https://www.kasandbox.org/",
+        pendingStates: ["expected-state"],
+      },
+    ),
+    /redirect origin/u,
+  );
+  assert.throws(
+    () => buildManualOAuthCallbackUrl(
+      "https://www.kasandbox.org/?code=spotify-code&state=wrong-state",
+      {
+        redirectUri: "https://www.kasandbox.org/",
+        pendingStates: ["expected-state"],
+      },
+    ),
+    /pending Spoot login/u,
+  );
 });

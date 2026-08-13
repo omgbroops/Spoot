@@ -1866,6 +1866,49 @@ input[type='range']::-moz-range-thumb {
   padding-top: 4px;
 }
 
+.oauth-code-form {
+  padding: 2px 0 14px;
+  border-bottom: 0.5px solid var(--stroke-soft);
+}
+
+.oauth-code-form .name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.oauth-code-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.oauth-code-row input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0.5px solid var(--stroke);
+  border-radius: 12px;
+  outline: 0;
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--text);
+}
+
+.oauth-code-row input::placeholder {
+  color: var(--text-faint);
+}
+
+.oauth-code-status {
+  min-height: 14px;
+  margin-top: 7px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+
+.oauth-code-status[data-error='true'] {
+  color: var(--danger);
+}
+
 .device-picker {
   position: relative;
   margin: 8px 0 14px;
@@ -3850,6 +3893,15 @@ button.toggle {
     <div class="modal-body">
       <div class="setting-label">Spotify</div>
       <div class="row-setting spotify-setting"><div><div class="name" id="spotify-account-status">Not connected</div><div class="setting-note" id="spotify-device-status">Spoot device unavailable</div></div><div class="btn-row"><button class="btn primary" id="settings-connect" type="button">Log in</button><button class="btn" id="settings-transfer" type="button" hidden>Use Spoot</button><button class="btn" id="settings-disconnect" type="button" hidden>Log out</button></div></div>
+      <form class="oauth-code-form" id="oauth-code-form" hidden>
+        <label class="name" for="oauth-code-input">Finish login manually</label>
+        <div class="setting-note">If Spotify returns to a 403 page, paste its code or the complete address here.</div>
+        <div class="oauth-code-row">
+          <input id="oauth-code-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Spotify code or callback URL" aria-describedby="oauth-code-status">
+          <button class="btn" id="oauth-code-submit" type="submit">Submit</button>
+        </div>
+        <div class="oauth-code-status" id="oauth-code-status" role="status" aria-live="polite">Choose Log in before submitting a code.</div>
+      </form>
       <div class="device-picker" id="device-picker" hidden>
         <button class="device-trigger" id="device-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="device-list" aria-labelledby="device-trigger-label device-trigger-name">
           <span><span class="device-trigger-label" id="device-trigger-label">Listening device</span><strong id="device-trigger-name">Choose a listening device</strong></span>
@@ -4308,7 +4360,7 @@ var TokenStore = class {
   }
 };
 
-// src/js/auth/spotify-auth.js?v=20260723-library1
+// src/js/auth/spotify-auth.js?v=20260813-manual-auth
 var SPOTIFY_AUTHORIZE_ENDPOINT = "https://accounts.spotify.com/authorize";
 var SPOTIFY_TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
 var DEFAULT_OAUTH_TRANSACTION_KEY = "spoot.auth.pkce";
@@ -4547,6 +4599,9 @@ var SpotifyAuth = class {
     return transactions.find(
       (transaction) => oauthStatesMatch(state, transaction.state)
     ) ?? null;
+  }
+  pendingTransactionStates() {
+    return this.readTransactions().map((transaction) => transaction.state);
   }
   writeTransactions(transactions) {
     if (!transactions.length) {
@@ -4878,9 +4933,68 @@ function createOAuthTransactionStorage({
   };
 }
 
-// src/js/auth/oauth-popup.js?v=20260812-sandbox-auth
+// src/js/auth/oauth-popup.js?v=20260813-manual-auth
 var DEFAULT_POLL_INTERVAL_MS = 150;
 var DEFAULT_TIMEOUT_MS = 10 * 60 * 1e3;
+function buildManualOAuthCallbackUrl(value, { redirectUri, pendingStates = [] } = {}) {
+  const input = String(value ?? "").trim();
+  if (!input) {
+    throw new Error("Paste the Spotify code or the complete callback URL.");
+  }
+  let redirect;
+  try {
+    redirect = new URL(redirectUri);
+  } catch {
+    throw new Error("Spoot's Spotify redirect URL is not configured.");
+  }
+  const states = pendingStates.filter(
+    (state2) => typeof state2 === "string" && state2
+  );
+  let callback;
+  try {
+    if (/^https?:\/\//iu.test(input)) {
+      callback = new URL(input);
+    } else if (input.startsWith("?")) {
+      callback = new URL(input, redirect);
+    } else if (/^(?:code|error)=/iu.test(input)) {
+      callback = new URL(redirect);
+      callback.search = input;
+    } else {
+      if (!states.length) {
+        throw new Error(
+          "Choose Log in first so Spoot can create the required PKCE login attempt."
+        );
+      }
+      if (states.length > 1) {
+        throw new Error(
+          "More than one login attempt is pending. Paste the complete callback URL instead."
+        );
+      }
+      callback = new URL(redirect);
+      callback.searchParams.set("code", input);
+      callback.searchParams.set("state", states[0]);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message) throw error;
+    throw new Error("That Spotify callback could not be read.");
+  }
+  if (callback.origin !== redirect.origin) {
+    throw new Error("That callback URL does not match Spoot's Spotify redirect origin.");
+  }
+  if (!callback.searchParams.has("code") && !callback.searchParams.has("error")) {
+    throw new Error("That callback does not contain a Spotify authorization code.");
+  }
+  const state = callback.searchParams.get("state");
+  if (!state) {
+    throw new Error("That callback is missing its login state. Paste the complete URL.");
+  }
+  if (!states.includes(state)) {
+    throw new Error(
+      "That callback does not match a pending Spoot login. Choose Log in and try again."
+    );
+  }
+  return callback.href;
+}
 function watchOAuthPopup({
   popup,
   expectedOrigin,
@@ -10712,6 +10826,10 @@ function getElements(root = document) {
     settingsConnect: byId(root, "settings-connect"),
     settingsTransfer: byId(root, "settings-transfer"),
     settingsDisconnect: byId(root, "settings-disconnect"),
+    oauthCodeForm: byId(root, "oauth-code-form"),
+    oauthCodeInput: byId(root, "oauth-code-input"),
+    oauthCodeSubmit: byId(root, "oauth-code-submit"),
+    oauthCodeStatus: byId(root, "oauth-code-status"),
     devicePicker: byId(root, "device-picker"),
     deviceTrigger: byId(root, "device-trigger"),
     deviceTriggerName: byId(root, "device-trigger-name"),
@@ -14164,6 +14282,9 @@ function renderSpotifySettings(settings = {}) {
     onClick: settings.onDisconnect || handlers7.onDisconnect,
     hidden: !settings.loggedIn
   });
+  if (elements.oauthCodeForm) {
+    elements.oauthCodeForm.hidden = settings.loggedIn || !settings.manualOAuth;
+  }
 }
 function configureAction(button, descriptor, fallback = {}) {
   if (!button) return;
@@ -14710,6 +14831,10 @@ function setupUi() {
     onTransfer: transferHere,
     onDisconnect: logout
   });
+  getElements().oauthCodeForm?.addEventListener(
+    "submit",
+    submitManualOAuthCallback
+  );
   const preferences = readUiPreferences();
   queueVisible = preferences.queueVisible !== false;
   dockVisible = preferences.dockVisible !== false;
@@ -15223,6 +15348,7 @@ function renderSettings(status = {}) {
   const loggedIn = Boolean(config?.mock || auth?.hasSession());
   renderSpotifySettings({
     loggedIn,
+    manualOAuth: Boolean(auth && !config?.mock),
     deviceReady: Boolean(controller?.deviceId),
     transferring: connectionState === "transferring-playback",
     accountText: config?.mock ? "Mock session" : loggedIn ? "Spotify connected" : "Not connected",
@@ -15292,6 +15418,9 @@ async function login() {
       // Keep the auth instance that created the verifier alive in this tab.
       navigate: (url) => oauthPopup.location.replace(url)
     });
+    setManualOAuthStatus(
+      "If Spotify returns to an error page, paste its code or complete address here."
+    );
     const watchedPopup = oauthPopup;
     stopOAuthPopupWatch = watchOAuthPopup({
       popup: watchedPopup,
@@ -15318,6 +15447,44 @@ async function login() {
     renderConnection("error", { message: humanizeError(error) });
   }
 }
+async function submitManualOAuthCallback(event) {
+  event?.preventDefault();
+  const elements = getElements();
+  const value = elements.oauthCodeInput?.value;
+  if (!auth || !config?.redirectUri) {
+    setManualOAuthStatus("Spotify login is not configured.", { error: true });
+    return;
+  }
+  let callbackUrl;
+  try {
+    callbackUrl = buildManualOAuthCallbackUrl(value, {
+      redirectUri: config.redirectUri,
+      pendingStates: auth.pendingTransactionStates()
+    });
+  } catch (error) {
+    const message = error?.message || "That Spotify code could not be used.";
+    setManualOAuthStatus(message, { error: true });
+    showToast(message);
+    return;
+  }
+  if (elements.oauthCodeSubmit) elements.oauthCodeSubmit.disabled = true;
+  setManualOAuthStatus("Finishing Spotify sign-in\u2026");
+  try {
+    const completed = await handleOAuthCallbackMessage({ url: callbackUrl });
+    if (completed && elements.oauthCodeInput) {
+      elements.oauthCodeInput.value = "";
+      setManualOAuthStatus("Spotify connected.");
+    }
+  } finally {
+    if (elements.oauthCodeSubmit) elements.oauthCodeSubmit.disabled = false;
+  }
+}
+function setManualOAuthStatus(message, { error = false } = {}) {
+  const status = getElements().oauthCodeStatus;
+  if (!status) return;
+  status.textContent = message;
+  status.dataset.error = String(Boolean(error));
+}
 async function handleOAuthCallbackMessage(data, source = null) {
   if (!auth) return;
   if (source && oauthPopup && source !== oauthPopup) return;
@@ -15337,6 +15504,7 @@ async function handleOAuthCallbackMessage(data, source = null) {
   if (oauthCallbackInFlightState === inFlightKey) return;
   oauthCallbackInFlightState = inFlightKey;
   const callbackPopup = source || oauthPopup;
+  let completed = false;
   renderConnection("authorizing", {
     message: "Finishing Spotify sign-in\u2026"
   });
@@ -15352,8 +15520,10 @@ async function handleOAuthCallbackMessage(data, source = null) {
     pendingOAuthCallback = void 0;
     completeOAuthOnOriginalTab();
     postOAuthResult(source, { ok: true, state: callbackState });
+    completed = true;
   } catch (error) {
     pendingOAuthCallback = error?.code === "token_network_error" ? { url: callbackUrl.href, state: callbackState } : void 0;
+    setManualOAuthStatus(humanizeError(error), { error: true });
     renderOAuthCallbackFailure(error);
     postOAuthResult(source, {
       ok: false,
@@ -15373,6 +15543,7 @@ async function handleOAuthCallbackMessage(data, source = null) {
       oauthCallbackInFlightState = void 0;
     }
   }
+  return completed;
 }
 function handleOAuthPopupClosed(popup) {
   if (oauthPopup !== popup || oauthCallbackInFlightState) return;
@@ -15395,7 +15566,7 @@ function handleOAuthPopupTimeout(popup) {
   renderConnection("error", {
     message: "Spotify sign-in timed out. Choose Log in to try again."
   });
-  renderSpotifySettings({ loggedIn: false, onConnect: login });
+  renderSpotifySettings({ loggedIn: false, manualOAuth: true, onConnect: login });
 }
 function retryPendingOAuthCallback() {
   if (!pendingOAuthCallback) return login();
@@ -15466,7 +15637,7 @@ function renderOAuthCallbackFailure(error) {
   );
   const state = isAuthorizationExpired(error) ? "authorization-expired" : "error";
   renderConnection(state, { message: humanizeError(error) });
-  renderSpotifySettings({ loggedIn: false, onConnect: login });
+  renderSpotifySettings({ loggedIn: false, manualOAuth: true, onConnect: login });
 }
 function completeOAuthOnOriginalTab() {
   if (!auth?.hasSession() || !auth.hasGrantedScopes(config?.scopes ?? [])) return;
