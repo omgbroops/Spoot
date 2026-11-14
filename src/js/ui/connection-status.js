@@ -71,6 +71,9 @@ export function renderSpotifySettings(settings = {}) {
     onClick: settings.onDisconnect || handlers.onDisconnect,
     hidden: !settings.loggedIn,
   });
+  if (elements.oauthCodeForm) {
+    elements.oauthCodeForm.hidden = settings.loggedIn || !settings.manualOAuth;
+  }
 }
 
 function configureAction(button, descriptor, fallback = {}) {

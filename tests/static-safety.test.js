@@ -76,9 +76,32 @@ test("the browser entrypoint refreshes port configuration and displays the confi
   const html = readFileSync(join(root, "index.html"), "utf8");
   const app = readFileSync(join(root, "src/js/app.js"), "utf8");
 
-  assert.match(html, /app\.js\?v=20260808-port5174/u);
+  assert.match(html, /app\.js\?v=20260813-manual-auth/u);
   assert.match(app, /from "\.\/config\.js\?v=20260808-port5174"/u);
   assert.match(app, /deviceText: `Register \$\{config\.redirectUri\} as the redirect URI`/u);
+});
+
+test("the generated single-file player embeds its font and sandbox OAuth recovery", () => {
+  const html = readFileSync(join(root, "single.html"), "utf8");
+  const index = readFileSync(join(root, "index.html"), "utf8");
+  const tokens = readFileSync(join(root, "src/styles/tokens.css"), "utf8");
+  const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const loader = readFileSync(join(root, "load.js"), "utf8");
+
+  assert.equal(manifest.scripts?.["build:single"], "node scripts/build-single.mjs");
+  assert.doesNotMatch(index, /fonts\.(?:googleapis|gstatic)\.com/u);
+  assert.match(tokens, /inter-latin\.woff2/u);
+  assert.match(html, /data:font\/woff2;base64,/u);
+  assert.match(html, /function watchOAuthPopup/u);
+  assert.match(index, /id="oauth-code-form"/u);
+  assert.match(html, /id="oauth-code-form"/u);
+  assert.match(html, /function buildManualOAuthCallbackUrl/u);
+  assert.match(html, /https:\/\/www\.kasandbox\.org\//u);
+  assert.doesNotMatch(html, /fonts\.(?:googleapis|gstatic)\.com/u);
+  assert.doesNotMatch(html, /\.\/src\/(?:js|styles|assets)\//u);
+  assert.match(loader, /raw\.githubusercontent\.com\/omgbroops\/Spoot\/single-file\/single\.html/u);
+  assert.match(loader, /cache:\s*'no-store'/u);
+  assert.doesNotMatch(loader, /cdn\.jsdelivr\.net.+single\.html/u);
 });
 
 test("all static relative JavaScript imports resolve", () => {

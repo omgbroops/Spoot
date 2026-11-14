@@ -6,9 +6,6 @@
   <meta name="color-scheme" content="dark">
   <title>Spoot</title>
   <link rel="icon" href="./src/assets/favicon.svg" type="image/svg+xml">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./src/styles/tokens.css?v=20260725-hybrid2">
   <link rel="stylesheet" href="./src/styles/base.css?v=20260725-hybrid2">
   <link rel="stylesheet" href="./src/styles/player.css?v=20260725-hybrid2">
@@ -190,6 +187,15 @@
     <div class="modal-body">
       <div class="setting-label">Spotify</div>
       <div class="row-setting spotify-setting"><div><div class="name" id="spotify-account-status">Not connected</div><div class="setting-note" id="spotify-device-status">Spoot device unavailable</div></div><div class="btn-row"><button class="btn primary" id="settings-connect" type="button">Log in</button><button class="btn" id="settings-transfer" type="button" hidden>Use Spoot</button><button class="btn" id="settings-disconnect" type="button" hidden>Log out</button></div></div>
+      <form class="oauth-code-form" id="oauth-code-form" hidden>
+        <label class="name" for="oauth-code-input">Finish login manually</label>
+        <div class="setting-note">If Spotify returns to a 403 page, paste its code or the complete address here.</div>
+        <div class="oauth-code-row">
+          <input id="oauth-code-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Spotify code or callback URL" aria-describedby="oauth-code-status">
+          <button class="btn" id="oauth-code-submit" type="submit">Submit</button>
+        </div>
+        <div class="oauth-code-status" id="oauth-code-status" role="status" aria-live="polite">Choose Log in before submitting a code.</div>
+      </form>
       <div class="device-picker" id="device-picker" hidden>
         <button class="device-trigger" id="device-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="device-list" aria-labelledby="device-trigger-label device-trigger-name">
           <span><span class="device-trigger-label" id="device-trigger-label">Listening device</span><strong id="device-trigger-name">Choose a listening device</strong></span>
@@ -305,6 +311,6 @@
 
   <div id="blank" aria-hidden="true"></div>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="./src/js/app.js?v=20260808-port5174"></script>
+  <script type="module" src="./src/js/app.js?v=20260813-manual-auth"></script>
 </body>
 </html>

@@ -309,6 +309,10 @@ export class SpotifyAuth {
     ) ?? null;
   }
 
+  pendingTransactionStates() {
+    return this.readTransactions().map((transaction) => transaction.state);
+  }
+
   writeTransactions(transactions) {
     if (!transactions.length) {
       this.transactionStorage.removeItem(this.transactionKey);

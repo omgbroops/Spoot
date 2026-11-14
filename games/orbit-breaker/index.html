@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080b16">
+  <title>Orbit Breaker</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="game.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="wordmark" href="#" aria-label="Orbit Breaker home"><span class="mark">◉</span> ORBIT<span class="wordmark-light">BREAKER</span></a>
+      <div class="top-note"><span class="live-dot"></span> ARCADE MODE</div>
+    </header>
+
+    <section class="game-layout" aria-label="Orbit Breaker game">
+      <div class="intro">
+        <p class="eyebrow">A LITTLE GRAVITY, A LOT OF GLOW</p>
+        <h1>Keep it<br><span>in orbit.</span></h1>
+        <p class="lede">Deflect the energy core. Clear the field. Try not to blink.</p>
+        <div class="stats" aria-live="polite">
+          <div class="stat"><span>SCORE</span><strong id="score">0000</strong></div>
+          <div class="stat"><span>BEST</span><strong id="best">0000</strong></div>
+          <div class="stat"><span>LIVES</span><strong id="lives">03</strong></div>
+        </div>
+        <div class="instructions"><span class="keycap">←</span><span class="keycap">→</span><span>or move your pointer</span></div>
+        <p class="small-note">Press <kbd>SPACE</kbd> to launch · <kbd>P</kbd> to pause</p>
+      </div>
+
+      <div class="board-wrap">
+        <div class="board-frame">
+          <canvas id="board" width="720" height="560" aria-label="Game board. Move the paddle with the arrow keys or pointer." role="img"></canvas>
+          <div class="overlay" id="overlay">
+            <div class="overlay-card">
+              <span class="overlay-icon" id="overlay-icon">✦</span>
+              <p class="eyebrow" id="overlay-kicker">READY WHEN YOU ARE</p>
+              <h2 id="overlay-title">Find your<br>orbit.</h2>
+              <p id="overlay-copy">A tiny game for a tiny break.</p>
+              <button id="start-button" type="button">Start playing <span>↗</span></button>
+            </div>
+          </div>
+        </div>
+        <footer class="board-footer"><span>FIELD 01 <b>·</b> DEEP SPACE</span><span id="status">CORE AT REST</span></footer>
+      </div>
+    </section>
+    <footer class="page-footer"><span>MADE FOR THE MOMENT BETWEEN TRACKS</span><span>✳ &nbsp;TAKE IT EASY</span></footer>
+  </main>
+</body>
+</html>
